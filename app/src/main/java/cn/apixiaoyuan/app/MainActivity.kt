@@ -25,6 +25,8 @@ import cn.apixiaoyuan.app.core.navigation.RouteApk
 import cn.apixiaoyuan.app.core.navigation.RouteHome
 import cn.apixiaoyuan.app.core.navigation.RouteRepl
 import cn.apixiaoyuan.app.core.navigation.RouteSettings
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,6 +42,12 @@ class MainActivity : ComponentActivity() {
 
 /**
  * 应用外壳：内容区交给 AppNavHost，底部叠液态玻璃 Tab 栏。
+ *
+ * 玻璃链路：
+ *  - [rememberLayerBackdrop] 创建背景录制层；
+ *  - 内容层 [AppNavHost] 挂 `.layerBackdrop(backdrop)` 把页面内容录成可采样纹理；
+ *  - [LiquidGlassTabBar] 消费该 backdrop，在 `drawBackdrop` 里走
+ *    `vibrancy() -> blur() -> lens()` 做真实折射。
  *
  * 五个主 Tab 与路由的映射固定，索引与 items 顺序一一对应；
  * 切换时先 navigate 再更新选中态，并用 launchSingleTop 避免重复压栈。
@@ -63,12 +71,16 @@ private fun AppShell() {
         listOf<Any>(RouteHome, RouteApk, RouteApi, RouteRepl, RouteSettings)
     }
 
+    // 背景录制层：内容层写入，底栏采样做折射。
+    val backdrop = rememberLayerBackdrop()
+
     Box(Modifier.fillMaxSize()) {
         AppNavHost(
             navController = navController,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 96.dp),
+                .padding(bottom = 96.dp)
+                .layerBackdrop(backdrop),
         )
 
         LiquidGlassTabBar(
@@ -83,6 +95,7 @@ private fun AppShell() {
                     }
                 }
             },
+            backdrop = backdrop,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }

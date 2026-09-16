@@ -1,7 +1,6 @@
 package cn.apixiaoyuan.app.core.design.icon
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.AutoMirrored
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.automirrored.outlined.List

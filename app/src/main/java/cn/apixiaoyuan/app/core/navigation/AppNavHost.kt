@@ -1,15 +1,20 @@
 package cn.apixiaoyuan.app.core.navigation
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import cn.apixiaoyuan.app.feature.api.ApiScreen
+import cn.apixiaoyuan.app.feature.apk.ApkScreen
+import cn.apixiaoyuan.app.feature.exercise.ExerciseScreen
+import cn.apixiaoyuan.app.feature.home.HomeScreen
+import cn.apixiaoyuan.app.feature.login.LoginScreen
+import cn.apixiaoyuan.app.feature.pk.PkScreen
+import cn.apixiaoyuan.app.feature.repl.ReplScreen
+import cn.apixiaoyuan.app.feature.samples.SamplesScreen
+import cn.apixiaoyuan.app.feature.settings.SettingsScreen
 import kotlinx.serialization.Serializable
 
 // ---- 路由定义（@Serializable object，供 navigation-compose 类型安全导航）----
@@ -63,29 +68,14 @@ fun AppNavHost(
         startDestination = RouteHome,
         modifier = modifier.fillMaxSize(),
     ) {
-        composable<RouteHome> { PlaceholderPage("首页") }
-        composable<RouteApk> { PlaceholderPage("APK 分析") }
-        composable<RouteApi> { PlaceholderPage("接口浏览器") }
-        composable<RouteRepl> { PlaceholderPage("协议请求台") }
-        composable<RouteSamples> { PlaceholderPage("样本库") }
-        composable<RoutePk> { PlaceholderPage("PK 模块") }
-        composable<RouteExercise> { PlaceholderPage("练习模块") }
-        composable<RouteLogin> { PlaceholderPage("登录注册") }
-        composable<RouteSettings> { PlaceholderPage("设置") }
-    }
-}
-
-/** 各功能页真实实现落盘前的统一占位，避免 NavHost 出现空 composable 分支。 */
-@Composable
-private fun PlaceholderPage(title: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        composable<RouteHome> { HomeScreen(navController) }
+        composable<RouteApk> { ApkScreen(navController) }
+        composable<RouteApi> { ApiScreen(navController) }
+        composable<RouteRepl> { ReplScreen(navController) }
+        composable<RouteSamples> { SamplesScreen(navController) }
+        composable<RoutePk> { PkScreen(navController) }
+        composable<RouteExercise> { ExerciseScreen(navController) }
+        composable<RouteLogin> { LoginScreen(navController) }
+        composable<RouteSettings> { SettingsScreen(navController) }
     }
 }
