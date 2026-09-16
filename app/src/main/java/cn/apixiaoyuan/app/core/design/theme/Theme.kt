@@ -38,7 +38,7 @@ fun ReverseOldGuyTheme(
         seedColor = seedColor,
         isDark = darkTheme,
         style = paletteStyle,
-        spec = colorSpec,
+        specVersion = colorSpec,
     )
 
     SideEffect { App.colorScheme = scheme }

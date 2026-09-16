@@ -28,7 +28,7 @@ class App : Application() {
         var paletteStyle by mutableStateOf(PaletteStyle.TonalSpot)
 
         /** 色板规范版本，2021 与 2025 两套 Tone 阶梯。 */
-        var colorSpec by mutableStateOf(ColorSpec.SPEC_2025)
+        var colorSpec by mutableStateOf(ColorSpec.SpecVersion.SPEC_2025)
 
         /** 种子色，取色失败或用户手动指定时使用。 */
         var seedColor by mutableStateOf(Color(0xFF6750A4))
