@@ -112,6 +112,56 @@ dependencies {
     implementation(libs.miuix.nav)
 
     // --- MaterialSymbols 图标库 ---
+    // 只引 outlined：filled 变体本地缓存无该产物、包结构未经解包验证，
+    // AppIcons 统一复用 outlined。等 CI 跑通后再补 filled 与 forKeySelected。
+    implementation(libs.composablehorizons.material.symbols.outlined)
+
+    // --- material-kolor（莫奈取色） ---
+    implementation(libs.materialkolor)
+
+    // --- kotlinx-serialization ---
+    implementation(libs.kotlinx.serialization.json)
+
+    // --- Room（数据层开写时连同 KSP 一起加回） ---
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+
+    // --- 网络 ---
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.gson)
+}
+
+tasks.withType<KotlinCompile> {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_21)
+        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
+        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
+    }
+}
+
+dependencies {
+    // --- Compose ---
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+
+    // --- miuix（LiquidGlass 悬浮底栏 / shader / nav） ---
+    implementation(libs.miuix.blur)
+    implementation(libs.miuix.shader)
+    implementation(libs.miuix.nav)
+
+    // --- MaterialSymbols 图标库 ---
     // 只引 outlined：filled 变体本地缓存无该产物、包结构与接收者未经解包验证，
     // AppIcons 统一复用 outlined。等 CI 跑通后再补 filled 与 forKeySelected。
     implementation(libs.composablehorizons.material.symbols.outlined)
