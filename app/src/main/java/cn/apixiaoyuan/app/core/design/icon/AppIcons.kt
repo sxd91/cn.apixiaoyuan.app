@@ -1,9 +1,9 @@
 package cn.apixiaoyuan.app.core.design.icon
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Android
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * 图标库统一出口。
  *
  * 底座是 androidx.compose.material.icons 的 material-icons-core
- * （Compose 自带，由 material3 传递带入）。
+ * （显式引入 material-icons-core:1.7.8）。
  *
  * 曾经引过 com.composables:icons-material-symbols-outlined-cmp:2.2.1，
  * 解包该 artifact 的 classes.jar 后，materialsymbols/outlined 包里
@@ -28,8 +28,8 @@ object AppIcons {
 
     private val outlined = mapOf(
         "Home" to Icons.Outlined.Home,
-        "Android" to Icons.Outlined.Android,
-        "Api" to Icons.Outlined.Code,
+        "Android" to Icons.Outlined.Person,
+        "Api" to Icons.Outlined.List,
         "Terminal" to Icons.Outlined.Build,
         "Settings" to Icons.Outlined.Settings,
     )
