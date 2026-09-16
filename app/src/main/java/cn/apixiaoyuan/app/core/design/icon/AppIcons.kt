@@ -1,9 +1,10 @@
 package cn.apixiaoyuan.app.core.design.icon
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.AutoMirrored
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -29,7 +30,7 @@ object AppIcons {
     private val outlined = mapOf(
         "Home" to Icons.Outlined.Home,
         "Android" to Icons.Outlined.Person,
-        "Api" to Icons.Outlined.List,
+        "Api" to Icons.AutoMirrored.Outlined.List,
         "Terminal" to Icons.Outlined.Build,
         "Settings" to Icons.Outlined.Settings,
     )
