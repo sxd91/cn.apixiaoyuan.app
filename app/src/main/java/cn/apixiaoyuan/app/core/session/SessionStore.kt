@@ -3,6 +3,9 @@ package cn.apixiaoyuan.app.core.session
 import android.content.Context
 import android.content.SharedPreferences
 import cn.apixiaoyuan.app.core.network.AuthInterceptor
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -113,5 +116,63 @@ object SessionStore {
     fun snapshot(): AuthInterceptor.AuthSnapshot? {
         val cookie = cookieHeader() ?: return null
         return AuthInterceptor.AuthSnapshot(yfdU = yfdU, cookie = cookie)
+    }
+}
+
+/**
+ * OkHttp 持久化 CookieJar。
+ *
+ * R2 落地收口：登录响应的 `Set-Cookie` 由 OkHttp 在响应返回时交给这里，
+ * 写入 [SessionStore]；之后每个请求的 `Cookie` 头也由这里从 [SessionStore] 组装。
+ * 这比在 [AuthInterceptor] 里手动拼 cookie 更贴近原版行为 —— 原版就是
+ * 靠一个 CookieJar 把整份 cookie 列表持久化到 MMKV 的 `cookie_store`。
+ *
+ * 与 [AuthInterceptor] 的分工：
+ *  - [AuthInterceptor] 负责 `YFD_U` 查询参数注入（那是业务参数，不是 cookie）；
+ *  - 本类负责 cookie 的读写。两者都读 [SessionStore]，数据源单一。
+ *
+ * 注意：httpOnly 的 cookie（sid / sess / g_sess 都是）在真机 MMKV 里
+ * 是以明文 JSON 存的，本工程同样明文落 SharedPreferences —— 与原版一致。
+ */
+object PersistentCookieJar : CookieJar {
+
+    override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+        if (cookies.isEmpty()) return
+        val merged = linkedMapOf<String, SessionStore.CookieEntry>()
+        // 先放入已有的，同名新 cookie 覆盖
+        SessionStore.loadCookies().forEach { merged[it.name] = it }
+        cookies.forEach { c ->
+            merged[c.name] = SessionStore.CookieEntry(
+                domain = c.domain,
+                name = c.name,
+                value = c.value,
+                path = c.path,
+                expiresAt = c.expiresAt,
+                hostOnly = c.hostOnly,
+                httpOnly = c.httpOnly,
+                persistent = c.persistent,
+                secure = c.secure,
+            )
+        }
+        SessionStore.saveCookies(merged.values.toList())
+    }
+
+    override fun loadForRequest(url: HttpUrl): List<Cookie> {
+        return SessionStore.loadCookies().mapNotNull { entry ->
+            runCatching {
+                Cookie.Builder()
+                    .domain(entry.domain)
+                    .path(entry.path)
+                    .name(entry.name)
+                    .value(entry.value)
+                    .apply {
+                        if (entry.expiresAt > 0L) expiresAt(entry.expiresAt)
+                        if (entry.httpOnly) httpOnly()
+                        if (entry.secure) secure()
+                        if (!entry.hostOnly) hostOnlyDomain(entry.domain)
+                    }
+                    .build()
+            }.getOrNull()
+        }
     }
 }

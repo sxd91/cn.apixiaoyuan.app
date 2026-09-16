@@ -3,6 +3,7 @@ package cn.apixiaoyuan.app.core.network
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import cn.apixiaoyuan.app.core.session.PersistentCookieJar
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit
  * [init] 时从配置（BuildConfig 或运行时设置）注入。这样切测试环境不用改代码。
  *
  * Interceptor 顺序有语义，不可随意调换：
+ *  0. [PersistentCookieJar] —— OkHttp 内建，先于所有 Interceptor 处理 Cookie
  *  1. [BaseUrlInterceptor] —— 先定最终 host
  *  2. [HeaderInterceptor]   —— 公共头
  *  3. [AuthInterceptor]     —— 鉴权（要读 [BaseUrl] 注解判断是否注入 YFD_U）
@@ -66,6 +68,7 @@ object RetrofitFactory {
         BaseUrlRegistry.register(BASE_YTK, ytkUrl)
 
         val client = OkHttpClient.Builder()
+            .cookieJar(PersistentCookieJar)
             .addInterceptor(BaseUrlInterceptor())
             .addInterceptor(HeaderInterceptor(appVersionName, appVersionCode))
             .addInterceptor(AuthInterceptor(sessionProvider))
