@@ -7,7 +7,6 @@ activity = "1.13.0"
 androidx-core-ktx = "1.19.0"
 lifecycle-runtime = "2.11.0"
 miuix = "0.9.4-rc01"
-composablehorizons-symbols = "2.2.1"
 materialkolor = "5.0.0"
 serialization = "1.11.0"
 navigation-compose = "2.9.0"
@@ -35,7 +34,6 @@ miuix-nav = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = 
 # Material Symbols 图标：这套库把图标注册成 androidx Icons.Outlined 上的扩展属性，
 # 用法与 cn.nizou.sxd 一致。filled 变体（icons-material-symbols-outlined-filled-cmp）
 # 暂不引入——本地缓存无该产物、包结构未经解包验证，AppIcons 先统一复用 outlined。
-composablehorizons-material-symbols-outlined = { module = "com.composables:icons-material-symbols-outlined-cmp", version.ref = "composablehorizons-symbols" }
 materialkolor = { module = "com.materialkolor:material-kolor", version.ref = "materialkolor" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 # Room 与 KSP 暂不启用：当前工程无 @Entity/@Dao，注解处理器空转；

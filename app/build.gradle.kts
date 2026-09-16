@@ -111,7 +111,6 @@ dependencies {
     // --- MaterialSymbols 图标库 ---
     // 只引 outlined：filled 变体本地缓存无该产物、包结构未经解包验证，
     // AppIcons 统一复用 outlined。等 CI 跑通后再补 filled 与 forKeySelected。
-    implementation(libs.composablehorizons.material.symbols.outlined)
 
     // --- material-kolor（莫奈取色） ---
     implementation(libs.materialkolor)
