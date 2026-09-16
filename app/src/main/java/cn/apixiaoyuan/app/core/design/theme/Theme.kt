@@ -30,7 +30,7 @@ import cn.apixiaoyuan.app.App
 fun ReverseOldGuyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     paletteStyle: PaletteStyle = App.paletteStyle,
-    colorSpec: ColorSpec = App.colorSpec,
+    colorSpec: ColorSpec.SpecVersion = App.colorSpec,
     seedColor: Color = App.seedColor,
     content: @Composable () -> Unit,
 ) {
