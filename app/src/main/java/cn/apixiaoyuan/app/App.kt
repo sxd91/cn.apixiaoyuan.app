@@ -8,6 +8,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
+import cn.apixiaoyuan.app.core.network.RetrofitFactory
+import cn.apixiaoyuan.app.core.network.NetworkConfig
 
 /**
  * 全局 Application。
@@ -37,5 +39,16 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // 网络底座：必须先于任何 ServiceLocator.xxx 的首次访问。
+        // 域名来自 NetworkConfig，由 mg/h.smali 的 d()/w() 方法链逐行确证。
+        RetrofitFactory.init(
+            leoBaseUrl = NetworkConfig.leoBaseUrl(),
+            ytkBaseUrl = NetworkConfig.ytkBaseUrl(),
+                        appVersionName = BuildConfig.VERSION_NAME,
+            appVersionCode = BuildConfig.VERSION_CODE,
+            sessionProvider = { null },   // TODO: R2 —— SessionManager 接入后替换
+            logging = BuildConfig.DEBUG,
+        )
     }
 }
