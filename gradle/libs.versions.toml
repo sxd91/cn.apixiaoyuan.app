@@ -32,10 +32,14 @@ androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling
 miuix-blur = { module = "top.yukonga.miuix.kmp:miuix-blur-android", version.ref = "miuix" }
 miuix-shader = { module = "top.yukonga.miuix.kmp:miuix-shader-android", version.ref = "miuix" }
 miuix-nav = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = "miuix" }
+# Material Symbols 图标：这套库把图标注册成 androidx Icons.Outlined 上的扩展属性，
+# 用法与 cn.nizou.sxd 一致。filled 变体（icons-material-symbols-outlined-filled-cmp）
+# 暂不引入——本地缓存无该产物、包结构未经解包验证，AppIcons 先统一复用 outlined。
 composablehorizons-material-symbols-outlined = { module = "com.composables:icons-material-symbols-outlined-cmp", version.ref = "composablehorizons-symbols" }
-composablehorizons-material-symbols-filled = { module = "com.composables:icons-material-symbols-outlined-filled-cmp", version.ref = "composablehorizons-symbols" }
 materialkolor = { module = "com.materialkolor:material-kolor", version.ref = "materialkolor" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+# Room 与 KSP 暂不启用：当前工程无 @Entity/@Dao，注解处理器空转；
+# 且 KSP 2.4.10-2.0.4 在镜像与本地仓库的可用性未经确认。数据层开写时一并加回。
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
@@ -46,6 +50,8 @@ retrofit-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref 
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+# kotlin-android 保留条目但 app 模块已不再 alias：AGP 9 起 Kotlin 由内置 KGP 接管，
+# 显式应用该插件会直接报 "no longer required for Kotlin support since AGP 9.0"。
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

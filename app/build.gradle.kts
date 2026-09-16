@@ -10,9 +10,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     // KSP 暂不引入：当前工程无 @Entity/@Dao，注解处理器空转；
-    // 且本机网络对 dl.google.com / repo1.maven.org 被黑洞，
-    // 阿里云镜像上 KSP 最新只同步到 2.3.12，与本工程 Kotlin 2.4.10 不匹配。
-    // 数据层开写时再补回，并在 CI（可直连）上解析。
+    // KSP 2.4.10-2.0.4 在镜像与本地仓库的可用性未经确认。
+    // 数据层开写时再补回，并在 CI 上解析。
 }
 
 fun gitShortHash(): String = providers.exec {
@@ -113,8 +112,9 @@ dependencies {
     implementation(libs.miuix.nav)
 
     // --- MaterialSymbols 图标库 ---
+    // 只引 outlined：filled 变体本地缓存无该产物、包结构与接收者未经解包验证，
+    // AppIcons 统一复用 outlined。等 CI 跑通后再补 filled 与 forKeySelected。
     implementation(libs.composablehorizons.material.symbols.outlined)
-    implementation(libs.composablehorizons.material.symbols.filled)
 
     // --- material-kolor（莫奈取色，9 种 PaletteStyle + ColorSpec 2021/2025） ---
     implementation(libs.materialkolor)
