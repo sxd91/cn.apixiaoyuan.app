@@ -6,8 +6,17 @@ import kotlinx.serialization.Serializable
 /**
  * 主域用户信息（`leoUserInfo`）。
  *
- * 十四个字段全部逐行来自 `smali_classes7/.../user/data/UserVO.smali`。
+ * 十四个字段全部逐行来自 `smali_classes7/.../user/data/UserVO.smali`，
+ * 并由真机 `leo_user_info` 的 `currentUserInfoStrKey` 实测印证：
+ * `{"avatarId":"194c454e055adac.jpg","avatarPendantId":0,"avatarPendantUrl":"",
+ *   "avatarUrl":"https://leo-online.fbcontent.cn/leo-gallery/194c454e055adac.jpg",
+ *   "defaultNickname":"...","grade":2,"gradeTrusted":true,"gradeUpdatedTime":1787586292053,
+ *   "hasBindWxSrv":false,"nickname":"sxdwjd...","nicknameUpdatedTime":1788092593252,
+ *   "primaryUserId":511467407,"role":1,"userId":1066052990}`
+ *
  * 角色常量：`ROLE_STUDENT=0`、`ROLE_PARENT=1`、`ROLE_TEACHER=2`。
+ *
+ * 注意 [userId] 与真机 cookie `userid` 同值，是 `YFD_U` 的取值来源。
  */
 @Serializable
 data class UserVO(
@@ -38,6 +47,12 @@ data class UserVO(
  *
  * 四个字段来自 `YtkUserSchoolInfo.smali`：`chuzhongInfo`/`daxueInfo`/
  * `gaozhongInfo`/`xiaoxueInfo`，各自是 [UserPhaseInfo]。
+ *
+ * 真机 `leo_user_info` 印证：`currentUserXiaoxueInfoStrKey` 是小学习段，
+ * 初中/高中/大学三段均为 `{"school":[]}`。
+ *
+ * [UserPhaseInfo] 定义在 `SchoolModels.kt`，`school` 元素类型已由真机
+ * 确证为 `SchoolNode`。
  */
 @Serializable
 data class YtkUserSchoolInfo(
@@ -48,22 +63,10 @@ data class YtkUserSchoolInfo(
 )
 
 /**
- * 单个学段的学校列表。
- *
- * ⚠️ `school` 的元素类型未确证 —— `UserPhaseInfo.smali` 里只看到
- * `List` 原始签名，泛型被擦除。**先用 `List<String>` 占位**，
- * 真机验证后若不符再改。这是本次落盘里唯一一处「字段类型靠推断」。
- */
-@Serializable
-data class UserPhaseInfo(
-    @SerialName("school") val school: List<String> = emptyList(),
-)
-
-/**
  * 账号域当前用户信息（`YtkAccountService.getCurrentUserInfo`）。
  *
  * 四个字段来自 `CurrentUserInfo.smali`：`createdTime`/`id`/`passwordExist`/`phone`。
- * 与 [LoginResponseBody.ytkUserId] 同量纲 —— `YFD_U` 应当取这里的 `id`。
+ * 注意这里的 `id` 是账号域 ID，与主域 [UserVO.userId] 不是同一量纲。
  */
 @Serializable
 data class CurrentUserInfo(

@@ -21,11 +21,25 @@ class AuthInterceptor(
     private val sessionProvider: () -> AuthSnapshot?,
 ) : Interceptor {
 
+    /**
+     * 鉴权快照。
+     *
+     * R2 已由真机确证（Redmi onyx / Android 16 / KernelSU）：登录态由
+     * 服务端 `Set-Cookie` 下发，原版把整份 cookie 列表存进 MMKV 的
+     * `cookie_store`（键 `cookieJsonListKey`）。因此这里的登录凭据是
+     * [cookie]（完整的 `Cookie:` 请求头），不再是 `Bearer token`。
+     *
+     * `token` 字段保留但标为废弃 —— 若某些接口确实走 `Authorization`
+     * 头（尚未在真机流量里观察到），仍可从此注入。
+     */
     data class AuthSnapshot(
         val yfdU: Long?,
-        val token: String?,
+        val cookie: String? = null,
+        @Deprecated("R2 已确证登录态走 Cookie，Authorization 头未在真机流量中观察到")
+        val token: String? = null,
     )
 
+    @Suppress("DEPRECATION")   // 兼容出口主动读废弃的 token 字段，警告是预期内的
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val snapshot = sessionProvider()
@@ -38,14 +52,21 @@ class AuthInterceptor(
             ?.getAnnotation(BaseUrl::class.java)
             ?.value
 
-        if (alias == BASE_YTK && snapshot?.yfdU != null) {
+        // 账号域必注入；主域有值也注入 —— 真机 userid cookie 挂在
+        // `yuanfudao.com` 全域，主域请求同样带 YFD_U。
+        if (snapshot?.yfdU != null && snapshot.yfdU > 0L) {
             val withQuery = request.url.newBuilder()
                 .setQueryParameter("YFD_U", snapshot.yfdU.toString())
                 .build()
             builder = builder.url(withQuery)
         }
 
-        // 2. 登录态 header
+        // 2. 登录态：完整 Cookie 头（sid / userid / sess / g_sess / ks_* 等）
+        if (!snapshot?.cookie.isNullOrEmpty()) {
+            builder.header("Cookie", snapshot.cookie)
+        }
+
+        // 3. 兼容路径：Authorization 头（当前未观察到，保留出口）
         if (!snapshot?.token.isNullOrEmpty()) {
             builder.header("Authorization", "Bearer ${snapshot.token}")
         }

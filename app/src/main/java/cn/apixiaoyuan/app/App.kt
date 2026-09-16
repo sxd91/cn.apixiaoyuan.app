@@ -10,6 +10,7 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import cn.apixiaoyuan.app.core.network.RetrofitFactory
 import cn.apixiaoyuan.app.core.network.NetworkConfig
+import cn.apixiaoyuan.app.core.session.SessionStore
 
 /**
  * 全局 Application。
@@ -40,14 +41,18 @@ class App : Application() {
         super.onCreate()
         instance = this
 
+        // 会话存储：必须在 RetrofitFactory.init 之前，因为 init 会立即
+        // 取用 SessionStore.snapshot() 作为 sessionProvider 的闭包。
+        SessionStore.init(this)
+
         // 网络底座：必须先于任何 ServiceLocator.xxx 的首次访问。
         // 域名来自 NetworkConfig，由 mg/h.smali 的 d()/w() 方法链逐行确证。
         RetrofitFactory.init(
             leoBaseUrl = NetworkConfig.leoBaseUrl(),
             ytkBaseUrl = NetworkConfig.ytkBaseUrl(),
-                        appVersionName = BuildConfig.VERSION_NAME,
+            appVersionName = BuildConfig.VERSION_NAME,
             appVersionCode = BuildConfig.VERSION_CODE,
-            sessionProvider = { null },   // TODO: R2 —— SessionManager 接入后替换
+            sessionProvider = { SessionStore.snapshot() },   // R2 已解：cookie 承载登录态
             logging = BuildConfig.DEBUG,
         )
     }
