@@ -1,7 +1,10 @@
 package cn.apixiaoyuan.app.core.network
 
+import cn.apixiaoyuan.app.core.network.api.LeoEnglishExerciseWritingApiService
+import cn.apixiaoyuan.app.core.network.api.LeoExerciseCommonLegacyApiService
 import cn.apixiaoyuan.app.core.network.api.LeoGatewayService
 import cn.apixiaoyuan.app.core.network.api.LeoProfileApiService
+import cn.apixiaoyuan.app.core.network.api.LeoUserApiService
 import cn.apixiaoyuan.app.core.network.api.YtkApiService
 
 /**
@@ -32,5 +35,17 @@ object ServiceLocator {
 
     val profile: LeoProfileApiService by lazy {
         RetrofitFactory.leo(LeoProfileApiService::class.java)
+    }
+
+    val user: LeoUserApiService by lazy {
+        RetrofitFactory.leo(LeoUserApiService::class.java)
+    }
+
+    val exerciseLegacy: LeoExerciseCommonLegacyApiService by lazy {
+        RetrofitFactory.leo(LeoExerciseCommonLegacyApiService::class.java)
+    }
+
+    val englishExercise: LeoEnglishExerciseWritingApiService by lazy {
+        RetrofitFactory.leo(LeoEnglishExerciseWritingApiService::class.java)
     }
 }
