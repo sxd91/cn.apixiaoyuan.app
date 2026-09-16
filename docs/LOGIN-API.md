@@ -180,9 +180,26 @@ data class YtkUserSchoolInfo(
 
 ```kotlin
 data class UserPhaseInfo(
-    val school: List<Any>,  // 泛型未确证，留待进一步读
+    val school: List<SchoolNode>,
+)
+
+// SchoolNode 的六个字段由真机 leo_user_info 的 currentUserXiaoxueInfoStrKey 解出：
+data class SchoolNode(
+    val id: Long,
+    val name: String,
+    val height: Int,       // 层级：4=省级 / 2=市级 / 1=区级
+    val initial: String,
+    val parentId: Long,
+    val regionPath: String,
 )
 ```
+
+**已修正**：原报告写 `List<Any>`（泛型未确证），真机 `currentUserXiaoxueInfoStrKey` 的实际值是
+`{"school":[{"height":4,"id":836863,"initial":"","name":"","parentId":0,"regionPath":""}]}`，
+元素类型确证为 `SchoolNode`。`height` 层级由 `parentId` 链反推：
+836863(4).parentId=0 → 840051(2).parentId=836863 → 983521(1).parentId=840051。
+
+另有 `UserVipInfo`（来自 `currentUserVipInfoKey`），含 `vipRightInfoVO` / `studyGroupRightInfo` / `svipRightInfoVO` 三个子结构，字段见 `core/model/SchoolModels.kt`。
 
 ### 4.6 UserAccount（`login/datas/`，旧版返回）
 
@@ -273,13 +290,20 @@ LoginResponse
 
 | 项 | 置信度 | 确证方法 |
 |---|---|---|
-| 首次登录 `YFD_U` 传 0 是否可行 | 低（推断） | 真机抓首次登录请求 |
 | 密码登录是否需先调 `smsVerify` | 中 | 读 `FastLoginActivity` 调用链 |
-| `UserPhaseInfo.school` 的元素类型 | 低 | 读 `UserPhaseInfo.smali` 完整泛型签名 |
 | `LoginResponseBody.phone` 派生逻辑 | 中 | 读 getter 方法体 |
 | 网关版 vendor 登录的确切路径 | 中 | 读 `LeoGatewayService` 剩余四个方法 |
-| token 存哪（MMKV key 名） | 未确证 | 真机 `/data/data/com.fenbi.android.leo/files/mmkv/` |
-| `YFD_U` 是否等同于 `ytkUserId` | 中 | 对比 `CurrentUserInfo.id` 与 `LoginResponseBody.ytkUserId` |
+| `ks_*` 系列 cookie 的签名算法 | 未确证 | 需看 native `libRequestEncoder.so` |
+| `__sub_user_infos__` 的解密方式 | 未确证 | 同上 |
+
+**已解决（真机确证，2026-09-16）：**
+
+| 项 | 结论 |
+|---|---|
+| 首次登录 `YFD_U` 传什么 | 传 `0`。`userid` cookie 登录后才下发，`SessionStore.yfdU` 未登录时返回 null |
+| `UserPhaseInfo.school` 元素类型 | `List<SchoolNode>`，六个字段见 4.5 |
+| token 存哪 | **不在响应体，在 `Set-Cookie`**。落 MMKV `cookie_store`，键 `cookieJsonListKey`，域 `yuanfudao.com` |
+| `YFD_U` 是否等同 `ytkUserId` | **不等同**。`YFD_U` = 主域 `userid` cookie = `UserVO.userId`；`ytkUserId` 是账号域 ID |
 
 ---
 
@@ -290,10 +314,72 @@ LoginResponse
 - `LeoGatewayService` 的 `passwordLogin` / `smsLogin` / `tokenLogin` 三个方法（路径 + 参数 + 返回全部确证）
 - `YtkApiService` 的五个方法（全部确证）
 - 八个数据类的字段（全部逐字段确证）
+- 登录动作已可用：`core/auth/AuthRepository.kt` 的 `loginByPassword` / `loginBySms` / `sendSmsCode` / `logout`，返回 `LoginOutcome` 五态
 
-**被阻塞的：**
+**R2 已解（真机确证）：**
 
-- `YFD_U` 的来源——首次登录传什么？后续从哪读？**这是 R2 风险的核心**，需真机确认。
-- token 的持久化位置——`LoginResponse` 里没看到 token 字段，说明 token 可能藏在 HTTP 响应头（`Set-Cookie` 或自定义头），或由 `body.ytkUserId` + 设备指纹组合生成。**需抓包确认。**
+登录凭据不是响应体里的字段，是服务端 `Set-Cookie` 下发的 cookie 集合。原版把整份
+cookie 列表以 JSON 存进 MMKV 的 `cookie_store`，键 `cookieJsonListKey`。
 
-**下一个动作建议：** 先落 `core/model/` 的八个数据类 + `core/network/api/` 的两个登录 Service（接口定义），**运行时逻辑留空壳**——先把「能编译、能列出接口」这个中间态做出来，`YFD_U` 与 token 的真相并行去挖。
+真机（Redmi onyx / Android 16 / KernelSU）实测的关键 cookie：
+
+| Cookie | 值（截断） | 性质 |
+|---|---|---|
+| `sid` | `7012770506069852030` | 持久 sid，`expiresAt=253402300799999`（永不过期），登录主键 |
+| `userid` | `1066052990` | **等于 `UserVO.userId`，就是 `YFD_U` 要注入的值** |
+| `sess` / `g_sess` / `ks_sess` | base64 密文 | 会话 token 三层 |
+| `ks_persistent` / `ks_r` / `ks_u` / `ks_deviceid` | — | 设备指纹与风控链 |
+| `__sub_user_infos__` | base64 密文 | 子账号信息 |
+
+**落地形状：**
+
+- `core/session/SessionStore.kt` —— cookie 持久化（`CookieEntry` 九字段对齐原版 JSON）
+- `core/session/SessionStore.kt` 里的 `PersistentCookieJar` —— OkHttp `CookieJar` 实现，`Set-Cookie` 自动落盘
+- `core/network/AuthInterceptor.kt` —— 只注入 `YFD_U` 查询参数；cookie 由 CookieJar 处理
+- `core/auth/AuthRepository.kt` —— 登录/登出/短信验证码唯一入口，`LoginOutcome` 五态对应四个业务码
+
+---
+
+## 附录 A. 真机取证记录（2026-09-16）
+
+**设备**：Redmi onyx（25053RT47C）/ Android 16 / KernelSU root（`context=u:r:ksu:s0`）
+
+**取证路径**：`/data/data/com.fenbi.android.leo/`
+
+### A.1 cookie_store（登录态真身）
+
+`files/mmkv/cookie_store`，键 `cookieJsonListKey`，值是 JSON 数组。
+字段：`domain` / `expiresAt` / `hostOnly` / `httpOnly` / `name` / `path` / `persistent` / `secure` / `value`。
+
+### A.2 leo_user_info（用户资料真身）
+
+`files/mmkv/leo_user_info` 里的键：
+
+| 键 | 内容 |
+|---|---|
+| `currentUserInfoStrKey@V3.21.0` | `UserVO` 十四字段 JSON |
+| `currentUserXiaoxueInfoStrKey@V3.21.0` | 小学习段 `SchoolNode` 列表 |
+| `currentUserChuZhongInfoStrKey@V3.21.0` | `{"school":[]}` |
+| `currentUserGaoZhongInfoStrKey@V3.21.0` | `{"school":[]}` |
+| `currentUserDaXueInfoStrKey@V3.102.0` | `{"school":[]}` |
+| `currentUserVipInfoKey@V3.23.0` | `UserVipInfo` JSON |
+| `currentUserPhoneKey@V3.21.0` | AES 密文（`0/v1$...==` 形态） |
+| `isCurrentUserParentCertificatedKey@V3.50.0` | Boolean |
+
+### A.3 leo_shepherd_id（设备指纹）
+
+`didKey@v3.68.0` = `$DUtA-DmaWBaa-xgaLMMFCl5fjJG__ajuzNf3`，24 字符，Base64 变体。
+系统层：`ro.serialno` = `5ee243c8`，`settings get secure android_id` = `75291af23fea578d`。
+
+### A.4 leo_user_info_un_remove（登出后保留）
+
+`lastUsedPhoneNumberKey@V3.104.0`（AES 密文）+ `hasEnteredDeregisterAccountKey@V3.127.0`。
+
+### A.5 设备环境
+
+| 项 | 值 |
+|---|---|
+| 型号 | 25053RT47C（Redmi onyx） |
+| Android | 16 |
+| 指纹 | `Redmi/onyx/onyx:16/BP2A.250605.031.A3/OS3.0.303.0.WOLCNXM:user/release-keys` |
+| root | KernelSU（`u:r:ksu:s0`） |
