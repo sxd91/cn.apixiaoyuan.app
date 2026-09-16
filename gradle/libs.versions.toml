@@ -39,17 +39,8 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 # Room 与 KSP 暂不启用：当前工程无 @Entity/@Dao，注解处理器空转；
 # 且 KSP 2.4.10-2.0.4 在镜像与本地仓库的可用性未经确认。数据层开写时一并加回。
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
-androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
-androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
-okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
-okhttp-logging = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
-retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
-retrofit-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "retrofit" }
-
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-# kotlin-android 保留条目但 app 模块已不再 alias：AGP 9 起 Kotlin 由内置 KGP 接管，
-# 显式应用该插件会直接报 "no longer required for Kotlin support since AGP 9.0"。
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
