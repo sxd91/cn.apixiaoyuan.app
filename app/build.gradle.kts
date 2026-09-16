@@ -4,14 +4,11 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    // AGP 9.0 起内置 Kotlin 支持，org.jetbrains.kotlin.android 插件必须移除，
+    // AGP 9.0 起内置 Kotlin 支持，org.jetbrains.kotlin.android 插件不再应用，
     // 否则 apply 阶段直接报 "no longer required for Kotlin support since AGP 9.0"。
-    // Kotlin 语言版本由 AGP 内置的 KGP 接管，jvmTarget 仍按 Java 21 对齐。
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    // KSP 暂不引入：当前工程无 @Entity/@Dao，注解处理器空转；
-    // KSP 2.4.10-2.0.4 在镜像与本地仓库的可用性未经确认。
-    // 数据层开写时再补回，并在 CI 上解析。
+    // KSP 暂不引入：当前工程无 @Entity/@Dao，注解处理器空转。数据层开写时补回。
 }
 
 fun gitShortHash(): String = providers.exec {
@@ -117,56 +114,6 @@ dependencies {
     implementation(libs.composablehorizons.material.symbols.outlined)
 
     // --- material-kolor（莫奈取色） ---
-    implementation(libs.materialkolor)
-
-    // --- kotlinx-serialization ---
-    implementation(libs.kotlinx.serialization.json)
-
-    // --- Room（数据层开写时连同 KSP 一起加回） ---
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-
-    // --- 网络 ---
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.gson)
-}
-
-tasks.withType<KotlinCompile> {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_21)
-        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
-        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
-    }
-}
-
-dependencies {
-    // --- Compose ---
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.foundation)
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.navigation.compose)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-
-    // --- miuix（LiquidGlass 悬浮底栏 / shader / nav） ---
-    implementation(libs.miuix.blur)
-    implementation(libs.miuix.shader)
-    implementation(libs.miuix.nav)
-
-    // --- MaterialSymbols 图标库 ---
-    // 只引 outlined：filled 变体本地缓存无该产物、包结构与接收者未经解包验证，
-    // AppIcons 统一复用 outlined。等 CI 跑通后再补 filled 与 forKeySelected。
-    implementation(libs.composablehorizons.material.symbols.outlined)
-
-    // --- material-kolor（莫奈取色，9 种 PaletteStyle + ColorSpec 2021/2025） ---
     implementation(libs.materialkolor)
 
     // --- kotlinx-serialization ---
