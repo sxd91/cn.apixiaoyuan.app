@@ -3,9 +3,13 @@ package cn.apixiaoyuan.app.core.network
 import cn.apixiaoyuan.app.core.network.api.LeoEnglishExerciseWritingApiService
 import cn.apixiaoyuan.app.core.network.api.LeoExerciseCommonLegacyApiService
 import cn.apixiaoyuan.app.core.network.api.LeoGatewayService
+import cn.apixiaoyuan.app.core.network.api.LeoPoemsParadiseApiService
 import cn.apixiaoyuan.app.core.network.api.LeoProfileApiService
+import cn.apixiaoyuan.app.core.network.api.LeoShareApiService
 import cn.apixiaoyuan.app.core.network.api.LeoUserApiService
+import cn.apixiaoyuan.app.core.network.api.ShepherdApiService
 import cn.apixiaoyuan.app.core.network.api.YtkApiService
+import cn.apixiaoyuan.app.core.network.api.YtkUserCenterApiService
 
 /**
  * 全部 ApiService 的集中出口，替代原版的 `sp/n`。
@@ -47,5 +51,23 @@ object ServiceLocator {
 
     val englishExercise: LeoEnglishExerciseWritingApiService by lazy {
         RetrofitFactory.leo(LeoEnglishExerciseWritingApiService::class.java)
+    }
+
+    val poemsParadise: LeoPoemsParadiseApiService by lazy {
+        RetrofitFactory.leo(LeoPoemsParadiseApiService::class.java)
+    }
+
+    val shepherd: ShepherdApiService by lazy {
+        RetrofitFactory.leo(ShepherdApiService::class.java)
+    }
+
+    val share: LeoShareApiService by lazy {
+        RetrofitFactory.leo(LeoShareApiService::class.java)
+    }
+
+    // ---- 账号域管理链（与 ytkApi 同域，路径不重叠）----
+
+    val ytkUserCenter: YtkUserCenterApiService by lazy {
+        RetrofitFactory.ytk(YtkUserCenterApiService::class.java)
     }
 }
