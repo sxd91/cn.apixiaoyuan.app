@@ -7,6 +7,7 @@ import cn.apixiaoyuan.app.core.network.BASE_LEO
 import cn.apixiaoyuan.app.core.network.BaseUrl
 import cn.apixiaoyuan.app.core.network.CheckNothing
 import cn.apixiaoyuan.app.core.network.GsonConverter
+import cn.apixiaoyuan.app.core.network.NeedEncode
 import cn.apixiaoyuan.app.core.network.NotNullAndValid
 import okhttp3.ResponseBody
 import retrofit2.Call
@@ -32,8 +33,9 @@ import retrofit2.http.Url
  * **编码方向**的 native 依赖（请求体需要 native 编码后再发），与
  * [cn.apixiaoyuan.app.core.network.NeedDecode] 的响应解码方向相反。
  * 已确证需编码的接口目前只有这一条，编码器实现在 `libRequestEncoder.so`。
- * 本工程当前用 [cn.apixiaoyuan.app.core.network.DecodeBridge] 的恒等实现
- * 挡着，真正接入在 native 复刻里程碑（DEV-PLAN M5）。
+ * 本工程已落 [cn.apixiaoyuan.app.core.network.EncodeBridge] 编码出口 +
+ * [cn.apixiaoyuan.app.core.network.NeedEncodeInterceptor] 拦截器，当前挂
+ * 恒等实现挡着；native 实现（`zcvsd1wr2t`）由 `core/native/` 装配替换。
  *
  * 详见 `docs/LOGIN-API.md` 与 `docs/API-INVENTORY.md`。
  */
@@ -98,6 +100,7 @@ interface LeoExerciseCommonLegacyApiService {
     @BaseUrl(BASE_LEO)
     @GsonConverter
     @NotNullAndValid
+    @NeedEncode
     @POST("/leo-star/android/exercise/rank/login/attend")
     suspend fun postSavedExp(@Body body: LeoTodayExerciseListData)
 }
