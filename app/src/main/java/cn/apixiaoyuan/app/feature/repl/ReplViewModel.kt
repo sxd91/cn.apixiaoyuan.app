@@ -227,6 +227,44 @@ class ReplViewModel : ViewModel() {
     private fun looksLikeNeedEncode(target: String): Boolean =
         target.contains("/leo-star/android/exercise/rank/login/attend")
 
+    /**
+     * 把一次「发送」落进请求流水。
+     *
+     * 与 [saveSample] 的区别：那个存样本（可重放），这个只记流水。
+     * 两条路径的 `needEncode` / `needDecode` 判定共用同一对私有函数，
+     * 避免「直接发送」与「存样本后重放」在编解码方向上分叉。
+     *
+     * 落库失败不打断请求 —— 历史写不进去不该让用户看不到响应。
+     */
+    private fun recordToHistory(
+        method: String,
+        url: String,
+        statusCode: Int,
+        success: Boolean,
+        durationMs: Long,
+        error: String?,
+    ) {
+        val repo = sampleRepo ?: return
+        val headerText = headerLines
+            .filter { it.contains(":") }
+            .joinToString("\n")
+            .takeIf { it.isNotBlank() }
+        viewModelScope.launch {
+            repo.recordRawRequest(
+                method = method,
+                url = url,
+                headers = headerText,
+                requestBody = body.takeIf { it.isNotBlank() },
+                requestEncoded = looksLikeNeedEncode(url),
+                statusCode = statusCode,
+                success = success,
+                durationMs = durationMs,
+                responseDecoded = looksLikeNeedDecode(url),
+                error = error,
+            )
+        }
+    }
+
     /** 样本名与 URL 变化时清掉旧提示。 */
     fun onUrlChanged(next: String) {
         url = next
@@ -275,12 +313,28 @@ class ReplViewModel : ViewModel() {
                 responseBody = raw.take(500_000)
                 history.add(0, HistoryEntry(requestMethod, target, response.code, elapsedMs))
                 if (history.size > 50) history.removeAt(history.size - 1)
+                recordToHistory(
+                    method = requestMethod,
+                    url = target,
+                    statusCode = response.code,
+                    success = response.isSuccessful,
+                    durationMs = elapsedMs,
+                    error = null,
+                )
             } catch (t: Throwable) {
                 elapsedMs = System.currentTimeMillis() - started
                 statusCode = -1
                 errorMessage = "${t.javaClass.simpleName}: ${t.message}"
                 history.add(0, HistoryEntry(requestMethod, target, -1, elapsedMs))
                 if (history.size > 50) history.removeAt(history.size - 1)
+                recordToHistory(
+                    method = requestMethod,
+                    url = target,
+                    statusCode = -1,
+                    success = false,
+                    durationMs = elapsedMs,
+                    error = "${t.javaClass.simpleName}: ${t.message}",
+                )
             } finally {
                 loading = false
             }

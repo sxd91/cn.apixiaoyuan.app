@@ -103,6 +103,49 @@ class SampleRepository(
         requestId
     }.getOrNull()
 
+    /**
+     * 从原始请求字段直接落一条历史。给协议请求台的「发送」用。
+     *
+     * 与 [recordReplay] 的区别：那个从 [Sample] 出发（样本重放），
+     * 这个从裸字段出发（手工发的请求）。两条路径最终写的是同一张表、
+     * 同一组语义，因此共用 [pathOf] 与 [HISTORY_KEEP]。
+     *
+     * @return 落库的 requestId；失败时返回 null。
+     */
+    suspend fun recordRawRequest(
+        method: String,
+        url: String,
+        headers: String?,
+        requestBody: String?,
+        requestEncoded: Boolean,
+        statusCode: Int,
+        success: Boolean,
+        durationMs: Long,
+        responseDecoded: Boolean,
+        error: String?,
+    ): String? = runCatching {
+        val requestId = java.util.UUID.randomUUID().toString()
+        val history = RequestHistory(
+            requestId = requestId,
+            timestamp = System.currentTimeMillis(),
+            method = method.uppercase(),
+            url = url,
+            path = pathOf(url),
+            headers = headers,
+            requestBody = requestBody,
+            requestEncoded = requestEncoded,
+            statusCode = statusCode,
+            success = success,
+            durationMs = durationMs,
+            responseDecoded = responseDecoded,
+            error = error,
+            bodyTruncated = false,
+        )
+        db.requestHistoryDao().insert(history)
+        db.requestHistoryDao().trimTo(HISTORY_KEEP)
+        requestId
+    }.getOrNull()
+
     /** 最近 [limit] 条请求历史。 */
     fun observeRecentHistory(limit: Int = 100): Flow<List<RequestHistory>> =
         db.requestHistoryDao().observeRecent(limit)
