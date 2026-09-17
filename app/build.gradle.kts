@@ -8,7 +8,8 @@ plugins {
     // 否则 apply 阶段直接报 "no longer required for Kotlin support since AGP 9.0"。
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    // KSP 暂不引入：当前工程无 @Entity/@Dao，注解处理器空转。数据层开写时补回。
+    // KSP：Room 注解处理器需要。数据层（模块 12-13）已开写，@Entity/@Dao 齐备。
+    alias(libs.plugins.ksp)
 }
 
 fun gitShortHash(): String = providers.exec {
@@ -119,9 +120,10 @@ dependencies {
     // --- kotlinx-serialization ---
     implementation(libs.kotlinx.serialization.json)
 
-    // --- Room（数据层开写时连同 KSP 一起加回） ---
+    // --- Room（模块 12-13：八表 + DAO，KSP 生成实现） ---
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     // --- 网络 ---
     implementation(libs.okhttp)
