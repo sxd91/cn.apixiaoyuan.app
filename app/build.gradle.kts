@@ -21,6 +21,10 @@ val versionProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "cn.apixiaoyuan.app"
     compileSdk = 37

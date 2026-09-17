@@ -10,6 +10,7 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import cn.apixiaoyuan.app.core.network.RetrofitFactory
 import cn.apixiaoyuan.app.core.network.NetworkConfig
+import cn.apixiaoyuan.app.core.database.AppDatabase
 import cn.apixiaoyuan.app.core.native.NativeDecodeInstaller
 import cn.apixiaoyuan.app.core.session.SessionStore
 
@@ -62,5 +63,9 @@ class App : Application() {
         // 而拦截器读取的是 DecodeBridge 这个全局单例；先装解码器再发第一个请求即可。
         // native 库加载失败时静默退回恒等实现，不阻断启动。
         NativeDecodeInstaller.install()
+
+        // 数据库：模块 12-13。八表实体 + SampleDao + AppDatabase。
+        // 只建库不迁数据，初始化无副作用；放最后，不干扰网络与会话链路。
+        AppDatabase.init(this)
     }
 }
