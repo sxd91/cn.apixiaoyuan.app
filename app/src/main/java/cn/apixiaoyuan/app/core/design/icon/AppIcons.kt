@@ -6,6 +6,10 @@ import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -32,6 +36,11 @@ object AppIcons {
         "Api" to Icons.AutoMirrored.Outlined.List,
         "Terminal" to Icons.Outlined.Build,
         "Settings" to Icons.Outlined.Settings,
+        // 首页快捷入口四键（不进底栏）
+        "Login" to Icons.Outlined.AccountCircle,
+        "Exercise" to Icons.Outlined.Edit,
+        "Pk" to Icons.Outlined.Star,
+        "Samples" to Icons.Outlined.Search,
     )
 
     /** 按 iconKey 取未选中态图标；未知 key 回退 Home，避免空图标崩溃。 */
