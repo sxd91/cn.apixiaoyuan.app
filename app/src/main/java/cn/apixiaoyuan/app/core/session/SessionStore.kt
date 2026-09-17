@@ -142,23 +142,39 @@ object PersistentCookieJar : CookieJar {
         // 先放入已有的，同名新 cookie 覆盖
         SessionStore.loadCookies().forEach { merged[it.name] = it }
         cookies.forEach { c ->
-            merged[c.name] = SessionStore.CookieEntry(
-                domain = c.domain,
-                name = c.name,
-                value = c.value,
-                path = c.path,
-                expiresAt = c.expiresAt,
-                hostOnly = c.hostOnly,
-                httpOnly = c.httpOnly,
-                persistent = c.persistent,
-                secure = c.secure,
-            )
+            // 服务端删除指令：value 为空且已过期（典型形态 Set-Cookie: ks_sess=;Max-Age=0）。
+            //
+            // 这种响应不是「下发一个空值 cookie」，是「让这个 cookie 失效」。原版
+            // 小猿口算的风控在 401 时会连发三行 ks_sess / ks_persistent / ks_deviceid
+            // 的清除指令（实测 HTTP 层可见）。若照单写入空值，本地就留下一条
+            // 「被服务端明确标记失效」的 cookie 记录，之后每次请求都带着空指纹走，
+            // 风控看到的就是一台被拒过的设备，陷入死循环。
+            //
+            // 正确处理：把同名旧条目从表里移除，而不是写入空值。
+            if (c.value.isEmpty() && (c.expiresAt <= 0L || !c.persistent)) {
+                merged.remove(c.name)
+            } else {
+                merged[c.name] = SessionStore.CookieEntry(
+                    domain = c.domain,
+                    name = c.name,
+                    value = c.value,
+                    path = c.path,
+                    expiresAt = c.expiresAt,
+                    hostOnly = c.hostOnly,
+                    httpOnly = c.httpOnly,
+                    persistent = c.persistent,
+                    secure = c.secure,
+                )
+            }
         }
         SessionStore.saveCookies(merged.values.toList())
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
         return SessionStore.loadCookies().mapNotNull { entry ->
+            // 兜底：value 为空的条目不发出。历史版本可能已经把空值写进磁盘，
+            // 这里再拦一道，避免污染请求。
+            if (entry.value.isEmpty()) return@mapNotNull null
             runCatching {
                 Cookie.Builder()
                     .domain(entry.domain)
