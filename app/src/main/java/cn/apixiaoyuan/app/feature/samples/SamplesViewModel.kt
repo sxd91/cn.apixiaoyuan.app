@@ -51,6 +51,10 @@ data class ReplayResult(
  * 重放时会按样本的 [Sample.needEncode] / [Sample.needDecode] 显式过一遍
  * `EncodeBridge` / `DecodeBridge` —— 样本库里记录的请求可能是编码后的形态，
  * 而服务器要的是编码后的字节；解码方向同理。
+ *
+ * 每次重放（无论成败）都会经 [SampleRepository.recordReplay] 落一行
+ * `request_history`，让样本重放也进请求流水 —— 这是模块 12-13 验收标准
+ * 「请求历史能落库、能查询、能重放」的最后一环。
  */
 class SamplesViewModel(
     private val repo: SampleRepository = SampleRepository(AppDatabase.get()),

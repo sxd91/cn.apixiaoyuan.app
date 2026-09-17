@@ -255,9 +255,40 @@ Room 八表（按需细化）：
 | `PkRecord` | PK 记录 |
 | `DecodedPayload` | 解码后的明文缓存 |
 
-**需要加回 KSP 插件**（`app/build.gradle.kts` 的 plugins 段 + `ksp(libs.androidx.room.compiler)` 依赖）。
+**KSP 插件已回**（`alias(libs.plugins.ksp)` + `ksp(libs.androidx.room.compiler)`）。
+
+**KSP 版本踩坑记录：** `libs.versions.toml` 原写 `ksp = "2.4.10-2.0.4"`，阿里云三个代理仓库（`google` / `public` / `gradle-plugin`）全部解析失败。查 `maven-metadata.xml` 后确认仓库里 KSP 插件最高只到 `2.3.12`（`<latest>2.3.12</latest>`），2.4.x 一个都没有 —— 该复合版本号尚不存在。改 `2.3.12` 后通过。`room-compiler:2.8.0` 在 google 代理里确认存在（HTTP 200）。
+
+**schema 导出：** `exportSchema = true` + `ksp { arg("room.schemaLocation", "$projectDir/schemas") }`，schema 落 `app/schemas/cn.apixiaoyuan.app.core.database.AppDatabase/1.json`。**不启用** `fallbackToDestructiveMigration` —— 请求样本是不可恢复的手工产物，改表必须写真实 Migration，不能靠清库蒙混。
+
+**实际落地：**
+
+| 文件 | 内容 |
+|---|---|
+| `core/database/RequestEntities.kt` | 请求链路四表：`RequestHistory` / `ResponseCache` / `Sample` / `DecodedPayload` |
+| `core/database/BusinessEntities.kt` | 业务链路四表：`User` / `Session` / `ExerciseRecord` / `PkRecord` |
+| `core/database/SampleDao.kt` | 样本表 DAO |
+| `core/database/RequestHistoryDao.kt` | 历史表 DAO（含 `trimTo` 裁剪） |
+| `core/database/AppDatabase.kt` | 八表注册 + 两个 DAO 入口 + 单例 |
+| `core/samples/SampleRepository.kt` | 样本读写 + 重放记录回写 + `recordReplay` 落历史 |
+| `feature/samples/SamplesViewModel.kt` | 列表状态 + 重放动作（直构 OkHttp，过编解码桥） |
+| `feature/samples/SamplesScreen.kt` | 样本列表 + 重放结果面板 + 空态 |
+
+**两处边界已写进 KDoc：**
+- `User` 表**不是鉴权来源** —— 登录态唯一真身在 `SessionStore`（cookie，R2 已闭环）。`Session` 表只存审计信息，不冗余 cookie 值。
+- `PkRecord` **不存胜负与得分** —— 口算 PK 是 H5（模块 8 已确证），原生只做入口与埋点，拿不到逐题结果。
+
+**待真机确认：** `ExerciseRecord` 的 `taskId` / `taskName` / `finishedCount` / `totalCount` 四字段是**推断**（`LeoCurrentTaskInfo` 当前为占位模型），真机验证后按实际调整。
 
 **验收标准：** 请求历史能落库、能查询、能重放。
+- 落库：`SampleRepository.recordReplay()` 每次重放落一行 `request_history`，写后 `trimTo(2000)` 裁剪。
+- 查询：`RequestHistoryDao.observeAll()` / `observeRecent(limit)` / `observeByPath(prefix)`。
+- 重放：`SamplesScreen` 每条样本可重放；样本来源为协议请求台（`ReplScreen`）的「存为样本」按钮。
+
+**已知缺口：**
+- 请求台「发送」本身**不落** `request_history`，只有「存为样本后的重放」落库。要让所有请求都进流水，需在 `ReplViewModel.send()` 里也插一行 —— 未做。
+- `ResponseCache` / `DecodedPayload` 两表已建但暂无写入方，等待响应缓存与解码缓存策略确定。
+- `User` / `Session` / `ExerciseRecord` / `PkRecord` 四表已建但暂无写入方，等待对应业务链路接入。
 
 ---
 
