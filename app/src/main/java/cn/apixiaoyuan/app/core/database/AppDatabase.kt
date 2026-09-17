@@ -52,6 +52,9 @@ abstract class AppDatabase : RoomDatabase() {
     /** 样本表入口。样本库页面用。 */
     abstract fun sampleDao(): SampleDao
 
+    /** 请求历史表入口。请求流水用。 */
+    abstract fun requestHistoryDao(): RequestHistoryDao
+
     companion object {
 
         private const val DB_NAME = "apixiaoyuan.db"

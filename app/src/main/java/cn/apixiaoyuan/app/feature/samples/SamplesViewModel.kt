@@ -130,6 +130,14 @@ class SamplesViewModel(
             lastReplay = replay
             replayingId = null
             repo.markReplayed(id, System.currentTimeMillis(), replay.success)
+            // 重放也进请求流水：成败都落，便于事后对照。
+            repo.recordReplay(
+                sample = sample,
+                statusCode = replay.statusCode,
+                success = replay.success,
+                durationMs = replay.durationMs,
+                error = replay.error,
+            )
         }
     }
 
