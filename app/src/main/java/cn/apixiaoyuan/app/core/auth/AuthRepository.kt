@@ -3,6 +3,9 @@ package cn.apixiaoyuan.app.core.auth
 import cn.apixiaoyuan.app.core.model.LoginResponse
 import cn.apixiaoyuan.app.core.model.UserVO
 import cn.apixiaoyuan.app.core.network.ApiException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import cn.apixiaoyuan.app.core.network.ServiceLocator
 import cn.apixiaoyuan.app.core.session.SessionStore
 
@@ -83,18 +86,50 @@ object AuthRepository {
     }
 
     /**
+     * 短信验证码发送结果。
+     *
+     * 与 [LoginOutcome] 分开的原因：发码接口（`/verifier/android/sms`）返回的是
+     * `Call<Void>`，没有业务码信封，只有 HTTP 状态码与可能的 JSON 错误体
+     * （实测失败时形如 `{"timestamp":...,"status":403,"message":"验证码获取失败"}`）。
+     */
+    sealed interface SmsOutcome {
+        /** HTTP 2xx，服务端已受理发码请求。 */
+        data object Sent : SmsOutcome
+
+        /** HTTP 非 2xx，服务端明确拒绝。[serverMessage] 是响应体里的 `message` 字段。 */
+        data class Rejected(val httpStatus: Int, val serverMessage: String?) : SmsOutcome
+
+        /** 传输层失败（DNS / 连接 / 超时）。 */
+        data class Failed(val message: String) : SmsOutcome
+    }
+
+    /**
      * 发送短信验证码。
      *
      * 走账号域 [ServiceLocator.ytkApi] 的 `/verifier/android/sms`。
-     * 返回 true 表示请求已发出且无异常；服务端是否真的发了短信由后续登录验证。
+     *
+     * **实测服务端在风控层就会拒绝**（2026-09-17，curl 直打）：
+     * ```
+     * POST https://ape-api.yuanfudao.com/verifier/android/sms?YFD_U=0
+     * -> HTTP 403 {"timestamp":...,"status":403,"message":"验证码获取失败"}
+     * ```
+     * 加 UA、加 `ks_deviceid` cookie 都不改变结果。原版 App 在发码前必定先走过
+     * 设备注册/bootstrap（`ks_*` 系列 cookie 由服务端下发），本工程当前没有这一步，
+     * 所以发码会被拒。[Rejected] 会把服务端的 `message` 原样带出，不再让 UI 层
+     * 用「请检查手机号或网络」掩盖真实原因。
      */
-    suspend fun sendSmsCode(phone: String): Boolean = try {
-        ServiceLocator.ytkApi.smsVerify(
+    suspend fun sendSmsCode(phone: String): SmsOutcome = try {
+        val response = ServiceLocator.ytkApi.smsVerify(
             yfdU = SessionStore.yfdU,
             phone = phone,
-        ).execute().isSuccessful
+        ).execute()
+        if (response.isSuccessful) {
+            SmsOutcome.Sent
+        } else {
+            SmsOutcome.Rejected(response.code(), extractServerMessage(response.errorBody()?.string()))
+        }
     } catch (e: Throwable) {
-        false
+        SmsOutcome.Failed(e.message ?: e.javaClass.simpleName)
     }
 
     /**
@@ -143,6 +178,9 @@ object AuthRepository {
                 message = "登录失败（code=${response.code}）",
             )
         }
+    } catch (e: retrofit2.HttpException) {
+        val serverMsg = extractServerMessage(e.response()?.errorBody()?.string())
+        LoginOutcome.Failed(e.code(), serverMsg ?: "HTTP ${e.code()}")
     } catch (e: ApiException.Http) {
         LoginOutcome.Failed(e.status, "HTTP ${e.status}")
     } catch (e: ApiException.Network) {
@@ -151,5 +189,22 @@ object AuthRepository {
         LoginOutcome.Failed(-2, "响应解析失败")
     } catch (e: Throwable) {
         LoginOutcome.Failed(-3, e.message ?: "未知错误")
+    }
+
+    /**
+     * 从服务端错误响应体里抽 `message` 字段。
+     *
+     * 小猿口算的错误响应统一形如：
+     * ```
+     * {"timestamp":1789645191184,"status":401,"message":"unauthorized"}
+     * ```
+     * 成功响应不走这条路径（由各自的 converter 处理）。抽不出来时返回 null，
+     * 让调用方退回状态码文本。
+     */
+    private fun extractServerMessage(rawBody: String?): String? {
+        if (rawBody.isNullOrBlank()) return null
+        return runCatching {
+            Json.parseToJsonElement(rawBody).jsonObject["message"]?.jsonPrimitive?.content
+        }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 }

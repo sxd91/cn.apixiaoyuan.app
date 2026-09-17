@@ -284,11 +284,13 @@ Room 八表（按需细化）：
 - 落库：`SampleRepository.recordReplay()` 每次重放落一行 `request_history`，写后 `trimTo(2000)` 裁剪。
 - 查询：`RequestHistoryDao.observeAll()` / `observeRecent(limit)` / `observeByPath(prefix)`。
 - 重放：`SamplesScreen` 每条样本可重放；样本来源为协议请求台（`ReplScreen`）的「存为样本」按钮。
+- 请求台发送：`ReplViewModel.send()` 的成功/失败两条路径各调 `recordToHistory()`，复用 `looksLikeNeedEncode()` / `looksLikeNeedDecode()` 与「存为样本」同一对判定函数，落 `recordRawRequest()`。
 
 **已知缺口：**
-- 请求台「发送」本身**不落** `request_history`，只有「存为样本后的重放」落库。要让所有请求都进流水，需在 `ReplViewModel.send()` 里也插一行 —— 未做。
 - `ResponseCache` / `DecodedPayload` 两表已建但暂无写入方，等待响应缓存与解码缓存策略确定。
 - `User` / `Session` / `ExerciseRecord` / `PkRecord` 四表已建但暂无写入方，等待对应业务链路接入。
+- `needEncode` / `needDecode` 两列是启发式判定（按 URL 路径前缀），样本表内可手改，待以真实响应内容反推校验。
+- `ExerciseRecord` 的 `taskId` / `taskName` / `finishedCount` / `totalCount` 四字段为推断，待真机确认。
 
 ---
 

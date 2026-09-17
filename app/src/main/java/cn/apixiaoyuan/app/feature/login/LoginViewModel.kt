@@ -78,18 +78,27 @@ class LoginViewModel : ViewModel() {
         errorMessage = null
     }
 
-    /** 发短信验证码。成功后启动 60 秒倒计时。 */
+    /**
+     * 发短信验证码。成功后启动 60 秒倒计时。
+     *
+     * 失败提示不再笼统写「请检查手机号或网络」—— 服务端拒绝时把它的 message
+     * 原样带出（实测风控层拒绝形如 `403 验证码获取失败`），否则用户与排查者
+     * 都会被误导到错误的排查方向。
+     */
     fun sendSmsCode() {
         if (!canSendCode) return
         loading = true
         errorMessage = null
         viewModelScope.launch {
-            val ok = AuthRepository.sendSmsCode(phone)
+            val outcome = AuthRepository.sendSmsCode(phone)
             loading = false
-            if (ok) {
-                startCountdown()
-            } else {
-                errorMessage = "验证码发送失败，请检查手机号或网络"
+            when (outcome) {
+                AuthRepository.SmsOutcome.Sent -> startCountdown()
+                is AuthRepository.SmsOutcome.Rejected -> errorMessage =
+                    outcome.serverMessage?.let { "验证码发送被拒（HTTP ${outcome.httpStatus}）：$it" }
+                        ?: "验证码发送被拒（HTTP ${outcome.httpStatus}）"
+                is AuthRepository.SmsOutcome.Failed -> errorMessage =
+                    "验证码发送失败：${outcome.message}"
             }
         }
     }
