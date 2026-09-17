@@ -10,6 +10,7 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import cn.apixiaoyuan.app.core.network.RetrofitFactory
 import cn.apixiaoyuan.app.core.network.NetworkConfig
+import cn.apixiaoyuan.app.core.native.NativeDecodeInstaller
 import cn.apixiaoyuan.app.core.session.SessionStore
 
 /**
@@ -55,5 +56,11 @@ class App : Application() {
             sessionProvider = { SessionStore.snapshot() },   // R2 已解：cookie 承载登录态
             logging = BuildConfig.DEBUG,
         )
+
+        // 解码桥：把 libContentEncoder.so 的真实解码器装进网络层 DecodeBridge。
+        // 必须在 RetrofitFactory.init 之后 —— init 会构造 NeedDecodeInterceptor，
+        // 而拦截器读取的是 DecodeBridge 这个全局单例；先装解码器再发第一个请求即可。
+        // native 库加载失败时静默退回恒等实现，不阻断启动。
+        NativeDecodeInstaller.install()
     }
 }
