@@ -23,8 +23,9 @@ import java.util.concurrent.TimeUnit
  *  1. [BaseUrlInterceptor] —— 先定最终 host
  *  2. [HeaderInterceptor]   —— 公共头
  *  3. [AuthInterceptor]     —— 鉴权（要读 [BaseUrl] 注解判断是否注入 YFD_U）
- *  4. [NeedDecodeInterceptor] —— 解码（会改变 body，必须在日志之前）
- *  5. [LoggingInterceptor]  —— 日志（打的是最终形态）
+ *  4. [NeedEncodeInterceptor] —— 编码（会改变请求 body，必须在发出之前）
+ *  5. [NeedDecodeInterceptor] —— 解码（会改变响应 body，必须在日志之前）
+ *  6. [LoggingInterceptor]  —— 日志（打的是最终形态）
  */
 object RetrofitFactory {
 
@@ -72,6 +73,7 @@ object RetrofitFactory {
             .addInterceptor(BaseUrlInterceptor())
             .addInterceptor(HeaderInterceptor(appVersionName, appVersionCode))
             .addInterceptor(AuthInterceptor(sessionProvider))
+            .addInterceptor(NeedEncodeInterceptor())
             .addInterceptor(NeedDecodeInterceptor())
             .addInterceptor(LoggingInterceptor(enabled = logging))
             .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
