@@ -89,7 +89,7 @@ fun ReplScreen(
         // ---- URL ----
         OutlinedTextField(
             value = viewModel.url,
-            onValueChange = { viewModel.url = it },
+            onValueChange = { viewModel.onUrlChanged(it) },
             label = { Text("URL") },
             placeholder = { Text("https://xyks.yuanfudao.com/leo-...") },
             singleLine = false,
@@ -165,20 +165,41 @@ fun ReplScreen(
         HorizontalDivider()
 
         // ---- 发送 ----
-        androidx.compose.material3.Button(
-            onClick = { viewModel.send() },
-            enabled = !viewModel.loading,
+        Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (viewModel.loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
-            } else {
-                Text("发送")
+            androidx.compose.material3.Button(
+                onClick = { viewModel.send() },
+                enabled = !viewModel.loading,
+                modifier = Modifier.weight(1f),
+            ) {
+                if (viewModel.loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text("发送")
+                }
             }
+
+            androidx.compose.material3.OutlinedButton(
+                onClick = { viewModel.saveSample() },
+                enabled = viewModel.url.isNotBlank(),
+            ) {
+                Text("存为样本")
+            }
+        }
+
+        viewModel.sampleHint?.let { hint ->
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (viewModel.sampleSaved) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.error,
+            )
         }
 
         // ---- 响应状态 ----

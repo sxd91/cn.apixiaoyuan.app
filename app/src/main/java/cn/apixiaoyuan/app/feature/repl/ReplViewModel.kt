@@ -6,7 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cn.apixiaoyuan.app.core.database.AppDatabase
+import cn.apixiaoyuan.app.core.database.Sample
 import cn.apixiaoyuan.app.core.network.BaseUrlRegistry
+import cn.apixiaoyuan.app.core.samples.SampleRepository
 import cn.apixiaoyuan.app.core.session.PersistentCookieJar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -16,6 +19,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -93,6 +99,19 @@ class ReplViewModel : ViewModel() {
     /** 可选方法。*/
     val methods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
 
+    /** 样本库入口。数据库不可用时为 null，存样本按钮据此禁用。 */
+    private val sampleRepo: SampleRepository? by lazy {
+        runCatching { SampleRepository(AppDatabase.get()) }.getOrNull()
+    }
+
+    /** 存样本的提示文案。null 表示无提示。 */
+    var sampleHint by mutableStateOf<String?>(null)
+        private set
+
+    /** 是否已成功存过样本（用于按钮的短反馈）。 */
+    var sampleSaved by mutableStateOf(false)
+        private set
+
     /** 已注册域名别名 → host，供快捷填充。*/
     fun hostOptions(): List<Pair<String, String>> = listOf("leo", "ytk").mapNotNull { alias ->
         BaseUrlRegistry.resolve(alias)?.let { alias to it.toString() }
@@ -100,6 +119,7 @@ class ReplViewModel : ViewModel() {
 
     fun selectMethod(next: String) {
         requestMethod = next
+        if (sampleHint != null) clearSampleHint()
     }
 
     fun addHeader() {
@@ -127,6 +147,90 @@ class ReplViewModel : ViewModel() {
         responseBody = null
         errorMessage = null
         elapsedMs = 0L
+    }
+
+    /** 清除存样本提示。修改 URL \/ Method \/ 重发时调用。 */
+    fun clearSampleHint() {
+        sampleHint = null
+        sampleSaved = false
+    }
+
+    /**
+     * 把当前构造的请求存为样本。
+     *
+     * 存的是**编码前**的形态：`headers` 逐行拼成 `name: value` 文本，
+     * `requestBody` 是用户填的明文。重放时由 [cn.apixiaoyuan.app.feature.samples.SamplesViewModel]
+     * 按 `needEncode` \/ `needDecode` 决定是否过 native 编解码。
+     *
+     * 编码 \/ 解码标记来自当前 Method 与 URL 的启发式判断，**不是确证事实**：
+     *  - `needDecode`：URL 落在已确证需解码的三个接口路径里（知识点运用 \/ 试卷详情）
+     *  - `needEncode`：URL 命中 `postSavedExp` 的路径
+     * 用户在样本库里可以按实际结果手动纠正这两项（表字段可写）。
+     *
+     * 样本名默认用 `METHOD 路径末段 时间`，重名时 DAO 会 ABORT，
+     * 这里把异常吞掉并给出「名字已存在」提示，不覆盖旧样本。
+     */
+    fun saveSample(customName: String? = null) {
+        val repo = sampleRepo ?: run {
+            sampleHint = "数据库未就绪，无法存样本"
+            return
+        }
+        val target = url.trim()
+        if (target.isBlank()) {
+            sampleHint = "URL 为空"
+            return
+        }
+        val name = customName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: defaultSampleName(target)
+        viewModelScope.launch {
+            val sample = Sample(
+                name = name,
+                description = null,
+                sourceRequestId = null,
+                method = requestMethod,
+                url = target,
+                headers = headerLines.filter { it.contains(":") }.joinToString("\n"),
+                requestBody = body.takeIf { it.isNotBlank() },
+                needEncode = looksLikeNeedEncode(target),
+                needDecode = looksLikeNeedDecode(target),
+                createdAt = System.currentTimeMillis(),
+                lastReplayedAt = null,
+                lastReplaySuccess = null,
+            )
+            val id = repo.create(sample)
+            if (id != null) {
+                sampleSaved = true
+                sampleHint = "已存为样本：$name"
+            } else {
+                sampleSaved = false
+                sampleHint = "样本名已存在：$name"
+            }
+        }
+    }
+
+    /** 默认样本名：`METHOD 路径末段 时间`。 */
+    private fun defaultSampleName(target: String): String {
+        val path = target.substringAfter("://", "").substringAfter("/", "").substringBefore("?")
+        val tail = path.trimEnd('/').substringAfterLast('/').take(24).ifEmpty { "root" }
+        val stamp = SimpleDateFormat("MMdd-HHmmss", Locale.US).format(Date())
+        return "$requestMethod $tail $stamp"
+    }
+
+    /** 已确证需解码的接口路径（来自 docs/LOGIN-API.md 与 ApiRegistry）。 */
+    private fun looksLikeNeedDecode(target: String): Boolean = listOf(
+        "/leo-chinese/android/knowledge/usage",
+        "/leo-chinese/android/knowledge",
+        "/leo-exam/android/paper",
+    ).any { target.contains(it) }
+
+    /** 已确证需编码的接口路径：postSavedExp。 */
+    private fun looksLikeNeedEncode(target: String): Boolean =
+        target.contains("/leo-star/android/exercise/rank/login/attend")
+
+    /** 样本名与 URL 变化时清掉旧提示。 */
+    fun onUrlChanged(next: String) {
+        url = next
+        if (sampleHint != null) clearSampleHint()
     }
 
     /** 发送请求。*/
