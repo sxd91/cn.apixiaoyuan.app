@@ -269,6 +269,52 @@ FastLoginActivity
 
 ---
 
+## 6. 请求台 → 样本库 → 请求历史（本工程侧链路）
+
+这一段是**本工程自己实现的链路**，不是原版逆向产物。记录在此以便与上面的原版接口清单区分。
+
+```
+ReplScreen（协议请求台）
+  │  手工填 URL / Method / Headers / Body
+  │  点「存为样本」
+  ▼
+SampleRepository.create(Sample)
+  │  落 core/database 的 sample 表
+  │  needEncode / needDecode 由 URL 启发式判定：
+  │    needEncode ← 命中 /leo-star/android/exercise/rank/login/attend（postSavedExp）
+  │    needDecode ← 命中 /leo-chinese/android/knowledge/usage、/leo-chinese/android/knowledge、/leo-exam/android/paper
+  ▼
+SamplesScreen（样本库）
+  │  点「重放」
+  ▼
+SamplesViewModel.replay()
+  │  直构 OkHttp（不经 Retrofit，URL 是动态完整 URL）
+  │  按 needEncode 过 EncodeBridge.encode()
+  │  按 needDecode 过 DecodeBridge.decode()
+  ▼
+SampleRepository.markReplayed()  → 回写 sample.lastReplayedAt / lastReplaySuccess
+SampleRepository.recordReplay() → 落 request_history 一行（requestId 用 UUID）
+                                   写后 trimTo(2000) 裁剪
+```
+
+**已确认的边界（写进了代码 KDoc）：**
+
+- 请求台「发送」按钮**不落库**，只有「存为样本后的重放」进 `request_history`。要让所有请求都进流水，需在 `ReplViewModel.send()` 里也插一行 —— 未做。
+- `needEncode` / `needDecode` 的判定是**启发式**，不是从响应内容反推的。样本表里这两列可手改；改后重放行为随之变化。
+- 样本的 `requestBody` 存的是**编码前明文**，重放时才编码；`headers` 存的是逐行 `name: value` 文本，不是 JSON。
+- 重放失败同样落历史 —— 失败记录说明该样本在当前登录态 / 服务端版本下打不通，是有价值的信息。
+
+**相关代码位置：**
+
+```
+app/src/main/java/cn/apixiaoyuan/app/feature/repl/ReplViewModel.kt        saveSample / defaultSampleName / looksLikeNeedEncode / looksLikeNeedDecode
+app/src/main/java/cn/apixiaoyuan/app/feature/repl/ReplScreen.kt           「存为样本」按钮
+app/src/main/java/cn/apixiaoyuan/app/core/samples/SampleRepository.kt     create / recordReplay / pathOf / HISTORY_KEEP
+app/src/main/java/cn/apixiaoyuan/app/feature/samples/SamplesViewModel.kt  replay / execute
+app/src/main/java/cn/apixiaoyuan/app/core/database/RequestHistoryDao.kt  observeRecent / trimTo
+```
+
+---
 ## 6. 关键文件路径索引（原 APK 侧）
 
 ```
