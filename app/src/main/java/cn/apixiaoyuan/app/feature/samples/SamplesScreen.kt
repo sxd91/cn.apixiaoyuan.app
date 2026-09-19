@@ -1,10 +1,10 @@
 package cn.apixiaoyuan.app.feature.samples
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.database.Sample
+import cn.apixiaoyuan.app.core.design.component.AppScaffold
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,94 +51,84 @@ import java.util.Locale
  *  1. 重放结果面板 —— 最近一次重放的成败、状态码、耗时、响应体（未重放时不显示）
  *  2. 样本列表 —— 每条展示名字、方法、URL、是否需编码/解码、上次重放状态
  *
- * 空态：没有任何样本时提示「还没有样本」，并说明样本从哪来（协议请求台存进来）。
- *
- * 底栏由外层 AppShell 统一挂载，底部预留 96dp。
+ * 顶栏与返回键由 [AppScaffold] 统一提供；
+ * 悬浮底栏是浮层，内容不再为它预留 96dp —— 这正是玻璃透明感成立的前提。
  */
 @Composable
 fun SamplesScreen(
     navController: NavHostController,
     viewModel: SamplesViewModel = viewModel(),
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 96.dp),
-    ) {
-        // 标题栏
-        Row(
+    AppScaffold(title = "样本库", onBack = { navController.popBackStack() }) { pad ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .fillMaxSize()
+                .padding(pad),
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(
-                    imageVector = AppIcons.forKey("Samples"),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Column {
-                Text(
-                    text = "样本库",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = AppIcons.forKey("Samples"),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
                 Text(
                     text = if (viewModel.loading) "加载中" else "${viewModel.samples.size} 条样本",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
 
-        when {
-            viewModel.loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-
-            viewModel.samples.isEmpty() -> {
-                EmptyState()
-            }
-
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        start = 20.dp,
-                        end = 20.dp,
-                        bottom = 24.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    viewModel.lastReplay?.let { replay ->
-                        item(key = "replay-result") {
-                            ReplayResultCard(replay = replay)
-                        }
+            when {
+                viewModel.loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
                     }
+                }
 
-                    items(viewModel.samples, key = { it.id }) { sample ->
-                        SampleCard(
-                            sample = sample,
-                            replaying = viewModel.replayingId == sample.id,
-                            onReplay = { viewModel.replay(sample.id) },
-                            onDelete = { viewModel.delete(sample.id) },
-                        )
+                viewModel.samples.isEmpty() -> EmptyState()
+
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 20.dp,
+                            end = 20.dp,
+                            bottom = 24.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        viewModel.lastReplay?.let { replay ->
+                            item(key = "replay-result") {
+                                ReplayResultCard(replay = replay)
+                            }
+                        }
+
+                        items(viewModel.samples, key = { it.id }) { sample ->
+                            SampleCard(
+                                sample = sample,
+                                replaying = viewModel.replayingId == sample.id,
+                                onReplay = { viewModel.replay(sample.id) },
+                                onDelete = { viewModel.delete(sample.id) },
+                            )
+                        }
                     }
                 }
             }

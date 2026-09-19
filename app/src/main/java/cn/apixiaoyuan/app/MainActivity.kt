@@ -79,7 +79,6 @@ private fun AppShell() {
             navController = navController,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 96.dp)
                 .layerBackdrop(backdrop),
         )
 

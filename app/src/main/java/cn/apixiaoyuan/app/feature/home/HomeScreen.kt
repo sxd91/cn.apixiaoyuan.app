@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.App
+import cn.apixiaoyuan.app.core.design.component.AppScaffold
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import cn.apixiaoyuan.app.core.navigation.RouteExercise
 import cn.apixiaoyuan.app.core.navigation.RouteLogin
@@ -47,65 +49,68 @@ import com.materialkolor.dynamiccolor.ColorSpec
  *  2. 登录态卡 —— 读 [SessionStore]，展示 cookie 承载的登录态（R2 闭环的可见面）
  *  3. 快捷入口网格 —— 四个已实现页面（登录 / 练习 / PK / 样本库）的直达入口
  *
- * 底栏由外层 AppShell 统一挂载，本屏不重复渲染底栏；底部预留 96dp 避免
- * 内容被 LiquidGlassTabBar 遮住（与 LoginScreen / ExerciseScreen 一致）。
+ * 顶栏由 [AppScaffold] 统一提供，statusBars（刘海/状态栏）留白由它负责；
+ * 悬浮玻璃底栏是浮层，内容不再为它预留 96dp —— 内容可以滑到底部被底栏遮住，
+ * 这正是玻璃透明感成立的前提。底部只吃 navigationBars（手势条）。
  *
  * 四个快捷入口的路由在 [cn.apixiaoyuan.app.core.navigation.AppNavHost] 里已注册，
  * 这里只做 navigate 触发，不改导航图。
  */
 @Composable
 fun HomeScreen(navController: NavHostController) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 24.dp)
-            .padding(bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(
-            text = "逆向系老挂",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = "小猿口算 3.141.1 逆向工作台",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    AppScaffold(title = "逆向系老挂", onBack = null) { pad: PaddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(pad)
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "逆向系老挂",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "小猿口算 3.141.1 逆向工作台",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
-        PaletteCard()
-        SessionCard()
+            PaletteCard()
+            SessionCard()
 
-        Text(
-            text = "快捷入口",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = 8.dp),
-        )
+            Text(
+                text = "快捷入口",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 8.dp),
+            )
 
-        val entries = listOf(
-            QuickEntry("登录", "Login", "账号域 cookie 登录", RouteLogin),
-            QuickEntry("练习", "Exercise", "任务卡 / 经验 / 英语章节", RouteExercise),
-            QuickEntry("口算 PK", "Pk", "H5 容器 + cookie 同步", RoutePk),
-            QuickEntry("样本库", "Samples", "请求历史与回放", RouteSamples),
-        )
+            val entries = listOf(
+                QuickEntry("登录", "Login", "账号域 cookie 登录", RouteLogin),
+                QuickEntry("练习", "Exercise", "任务卡 / 经验 / 英语章节", RouteExercise),
+                QuickEntry("口算 PK", "Pk", "H5 容器 + cookie 同步", RoutePk),
+                QuickEntry("样本库", "Samples", "请求历史与回放", RouteSamples),
+            )
 
-        entries.chunked(2).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                row.forEach { entry ->
-                    QuickEntryCard(
-                        entry = entry,
-                        modifier = Modifier.weight(1f),
-                        onClick = { navController.navigate(entry.route) },
-                    )
+            entries.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    row.forEach { entry ->
+                        QuickEntryCard(
+                            entry = entry,
+                            modifier = Modifier.weight(1f),
+                            onClick = { navController.navigate(entry.route) },
+                        )
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
