@@ -68,6 +68,14 @@ interface YtkApiService {
      * 发送短信验证码。
      *
      * **路径前缀是 `/verifier/`，不是 `/accounts/`。**
+     *
+     * @param yfdU  设备指纹派生值（原版 `Lds/i3` 指纹串经 MD5 取前 8 字节大端拼 long）。
+     *              服务端 `@Nullable` —— 首次发码可省略，实测省略不报错；
+     *              为 null 时 Retrofit 不拼该 query 参数。
+     * @param phone 手机号 **RSA 密文**（`RSA/ECB/PKCS1PADDING` + Base64 NO_WRAP），
+     *              由 [cn.apixiaoyuan.app.core.auth.PhoneEncoder.encode] 产出。
+     *              服务端对明文 phone 返回 403 `{"status":403,"message":"验证码获取失败"}`；
+     *              密文才走通（已实测 200 空体，验证码真下发）。
      */
     @BaseUrl(BASE_YTK)
     @CheckNothing
@@ -75,8 +83,8 @@ interface YtkApiService {
     @FormUrlEncoded
     @POST("/verifier/android/sms")
     fun smsVerify(
-        @Query("YFD_U") yfdU: Long?,
-        @Field("phone") phone: String?,
+        @Query("YFD_U") yfdU: Long? = null,
+        @Field("phone") phone: String,
     ): Call<Void>
 
     /**

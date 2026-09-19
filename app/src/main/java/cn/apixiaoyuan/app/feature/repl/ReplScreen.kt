@@ -49,34 +49,63 @@ fun ReplScreen(navController: NavHostController, viewModel: ReplViewModel = view
                 color = MaterialTheme.colorScheme.onSurface,
             )
 
-            OutlinedTextField(
-                value = viewModel.method,
-                onValueChange = viewModel::onMethodChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("方法") },
-                singleLine = true,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                viewModel.hostOptions().forEach { (alias, _) ->
+                    TextButton(onClick = { viewModel.applyHost(alias) }) { Text(alias) }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                viewModel.methods.take(4).forEach { m ->
+                    TextButton(
+                        onClick = { viewModel.selectMethod(m) },
+                        enabled = viewModel.requestMethod != m,
+                    ) {
+                        Text(m)
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = viewModel.url,
-                onValueChange = viewModel::onUrlChange,
+                onValueChange = { viewModel.onUrlChanged(it) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("URL") },
                 singleLine = true,
             )
+
             OutlinedTextField(
                 value = viewModel.body,
-                onValueChange = viewModel::onBodyChange,
+                onValueChange = { viewModel.body = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("请求体") },
-                minLines = 4,
+                label = { Text("请求体（POST/PUT/PATCH）") },
+                minLines = 3,
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { viewModel.send() }) { Text("发送") }
-                TextButton(onClick = { viewModel.saveAsSample() }) { Text("存为样本") }
+                TextButton(onClick = { viewModel.send() }, enabled = !viewModel.loading) {
+                    Text(if (viewModel.loading) "发送中…" else "发送")
+                }
+                TextButton(onClick = { viewModel.saveSample() }) { Text("存为样本") }
             }
 
-            viewModel.lastResult?.let { result ->
+            viewModel.sampleHint?.let { hint ->
+                Text(
+                    text = hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            viewModel.errorMessage?.let { err ->
+                Text(
+                    text = err,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            if (viewModel.statusCode != -1) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -88,16 +117,18 @@ fun ReplScreen(navController: NavHostController, viewModel: ReplViewModel = view
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            text = "HTTP ${result.statusCode} · ${result.durationMs}ms",
+                            text = "HTTP ${viewModel.statusCode} · ${viewModel.elapsedMs}ms",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        Text(
-                            text = result.body,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        viewModel.responseBody?.let { bodyText ->
+                            Text(
+                                text = bodyText,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -108,19 +139,36 @@ fun ReplScreen(navController: NavHostController, viewModel: ReplViewModel = view
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            viewModel.headers.forEach { h ->
-                Card(
+            viewModel.headerLines.forEachIndexed { index, line ->
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    OutlinedTextField(
+                        value = line,
+                        onValueChange = { viewModel.setHeader(index, it) },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("name: value") },
+                        singleLine = true,
+                    )
+                    TextButton(onClick = { viewModel.removeHeader(index) }) { Text("删") }
+                }
+            }
+            TextButton(onClick = { viewModel.addHeader() }) { Text("+ 请求头") }
+
+            if (viewModel.history.isNotEmpty()) {
+                Text(
+                    text = "最近请求",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                viewModel.history.take(8).forEach { entry ->
                     Text(
-                        text = "${h.name}: ${h.value}",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "${entry.method} ${entry.status} ${entry.elapsedMs}ms  ${entry.url}",
+                        style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
             }

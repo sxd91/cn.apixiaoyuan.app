@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +44,8 @@ fun ExerciseScreen(
     navController: NavHostController,
     viewModel: ExerciseViewModel = viewModel(),
 ) {
+    LaunchedEffect(Unit) { viewModel.load() }
+
     AppScaffold(title = "练习", onBack = { navController.popBackStack() }) { pad: PaddingValues ->
         Column(
             modifier = Modifier
@@ -69,7 +72,7 @@ fun ExerciseScreen(
                     }
                 }
 
-                viewModel.error != null -> {
+                viewModel.errorMessage != null -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -82,7 +85,7 @@ fun ExerciseScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = viewModel.error ?: "",
+                                text = viewModel.errorMessage ?: "",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                             )
@@ -93,7 +96,7 @@ fun ExerciseScreen(
 
                 else -> {
                     viewModel.exp?.let { ExpCard(it) }
-                    viewModel.sections.forEach { section ->
+                    viewModel.englishSections.forEach { section ->
                         SectionCard(section)
                     }
                 }
@@ -123,7 +126,7 @@ private fun ExpCard(exp: LeoUserCurrentExpData) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "${exp.currentExp} / ${exp.targetExp}",
+                text = "${exp.currentExp} / ${exp.nextLevelExp}",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
@@ -147,13 +150,13 @@ private fun SectionCard(section: ExerciseSection) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = section.title,
+                text = section.title ?: "章节 ${section.sectionId}",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "${section.done} / ${section.total}",
+                text = "${section.unitIds.size} 个单元",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

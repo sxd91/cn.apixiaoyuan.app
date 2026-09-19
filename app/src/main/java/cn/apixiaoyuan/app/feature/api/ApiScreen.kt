@@ -114,12 +114,12 @@ private fun ApiDetailPane(viewModel: ApiViewModel, endpoint: ApiRegistry.ApiEndp
             )
 
             Text(
-                text = endpoint.description,
+                text = endpoint.note ?: "",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
 
-            if (viewModel.sending) {
+            if (viewModel.loading) {
                 Text(
                     text = "发送中…",
                     style = MaterialTheme.typography.bodySmall,

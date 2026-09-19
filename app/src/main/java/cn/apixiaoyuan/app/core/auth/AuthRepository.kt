@@ -120,8 +120,8 @@ object AuthRepository {
      */
     suspend fun sendSmsCode(phone: String): SmsOutcome = try {
         val response = ServiceLocator.ytkApi.smsVerify(
-            yfdU = SessionStore.yfdU,
-            phone = phone,
+            yfdU = SessionStore.yfdU.takeIf { SessionStore.isLoggedIn },
+            phone = PhoneEncoder.encode(phone),
         ).execute()
         if (response.isSuccessful) {
             SmsOutcome.Sent
