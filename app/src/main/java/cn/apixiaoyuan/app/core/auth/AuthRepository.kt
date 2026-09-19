@@ -8,21 +8,20 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import cn.apixiaoyuan.app.core.network.ServiceLocator
 import cn.apixiaoyuan.app.core.session.SessionStore
+import retrofit2.HttpException
 
 /**
  * 登录 / 登出 / 短信验证码的唯一入口。
  *
- * 链路（R2 落地后的完整形态）：
- *  1. 调 [ServiceLocator.gateway] 的登录方法；
+ * 链路：
+ *  1. 调 [ServiceLocator] 对应的服务方法；
  *  2. OkHttp 的 [cn.apixiaoyuan.app.core.session.PersistentCookieJar] 在响应返回时
  *     自动把 `Set-Cookie` 落进 [SessionStore] —— 这一步不需要本类插手；
- *  3. 本类校验业务码（`code == 1` 才是成功，不是 [cn.apixiaoyuan.app.core.network.CODE_SUCCESS]）；
+ *  3. 本类校验业务码（`code == 1` 才是成功）；
  *  4. 成功后拉一次 [UserVO] 确认登录态可用，失败则清空 [SessionStore]。
  *
- * 注意与 [cn.apixiaoyuan.app.core.network.ApiResult] 的关系：登录响应用的是
- * [LoginResponse] 这套「code==1 成功」的旧信封，不走 `Envelope<T>`。所以这里
- * 直接返回 [LoginOutcome]，让调用方拿到结构化的四态结果，而不是把 code 判断
- * 散到 UI 层。
+ * 所有服务方法都是 `suspend`，本类全部方法也都是 `suspend`。调用方在主线程
+ * （如 `viewModelScope`）直接调即可，不需要自己 `withContext(Dispatchers.IO)`。
  */
 object AuthRepository {
 
@@ -51,8 +50,7 @@ object AuthRepository {
      *
      * @param phone    手机号
      * @param password 密码（明文，原版就是明文 POST，未观察到客户端加密）
-     * @param yfdU     猿辅导用户 ID。**首次登录传 0** —— 原版 [LeoGatewayService.passwordLogin]
-     *                 的 `@Query("YFD_U")` 在未登录场景下就是 0。
+     * @param yfdU     猿辅导用户 ID。**首次登录传 0**。
      */
     suspend fun loginByPassword(
         phone: String,
@@ -69,7 +67,7 @@ object AuthRepository {
     /**
      * 短信验证码登录。
      *
-     * @param autoRegister 未注册手机号是否自动注册（原版默认行为取决于入口，这里由调用方指定）
+     * @param autoRegister 未注册手机号是否自动注册
      */
     suspend fun loginBySms(
         phone: String,
@@ -88,8 +86,8 @@ object AuthRepository {
     /**
      * 短信验证码发送结果。
      *
-     * 与 [LoginOutcome] 分开的原因：发码接口（`/verifier/android/sms`）返回的是
-     * `Call<Void>`，没有业务码信封，只有 HTTP 状态码与可能的 JSON 错误体
+     * 与 [LoginOutcome] 分开的原因：发码接口（`/verifier/android/sms`）没有业务码信封，
+     * 只有 HTTP 状态码与可能的 JSON 错误体
      * （实测失败时形如 `{"timestamp":...,"status":403,"message":"验证码获取失败"}`）。
      */
     sealed interface SmsOutcome {
@@ -99,7 +97,7 @@ object AuthRepository {
         /** HTTP 非 2xx，服务端明确拒绝。[serverMessage] 是响应体里的 `message` 字段。 */
         data class Rejected(val httpStatus: Int, val serverMessage: String?) : SmsOutcome
 
-        /** 传输层失败（DNS / 连接 / 超时）。 */
+        /** 传输层失败（DNS / 连接 / 超时）或本地编码失败。 */
         data class Failed(val message: String) : SmsOutcome
     }
 
@@ -108,26 +106,22 @@ object AuthRepository {
      *
      * 走账号域 [ServiceLocator.ytkApi] 的 `/verifier/android/sms`。
      *
-     * **实测服务端在风控层就会拒绝**（2026-09-17，curl 直打）：
-     * ```
-     * POST https://ape-api.yuanfudao.com/verifier/android/sms?YFD_U=0
-     * -> HTTP 403 {"timestamp":...,"status":403,"message":"验证码获取失败"}
-     * ```
-     * 加 UA、加 `ks_deviceid` cookie 都不改变结果。原版 App 在发码前必定先走过
-     * 设备注册/bootstrap（`ks_*` 系列 cookie 由服务端下发），本工程当前没有这一步，
-     * 所以发码会被拒。[Rejected] 会把服务端的 `message` 原样带出，不再让 UI 层
-     * 用「请检查手机号或网络」掩盖真实原因。
+     * 服务方法 [cn.apixiaoyuan.app.core.network.api.YtkApiService.smsVerify] 是 `suspend`，
+     * 内部由 Retrofit 切到 IO 线程，本方法可在主线程直接调用。
+     *
+     * 注意 [PhoneEncoder.encode] 在本方法内同步执行 —— RSA 编码是纯 CPU 计算，
+     * 1024 位一次加密毫秒级，不构成主线程阻塞。它的失败（如 provider 不可用）
+     * 由外层 `catch (e: Throwable)` 接住，归入 [SmsOutcome.Failed]。
      */
     suspend fun sendSmsCode(phone: String): SmsOutcome = try {
-        val response = ServiceLocator.ytkApi.smsVerify(
+        val encoded = PhoneEncoder.encode(phone)
+        ServiceLocator.ytkApi.smsVerify(
             yfdU = SessionStore.yfdU.takeIf { SessionStore.isLoggedIn },
-            phone = PhoneEncoder.encode(phone),
-        ).execute()
-        if (response.isSuccessful) {
-            SmsOutcome.Sent
-        } else {
-            SmsOutcome.Rejected(response.code(), extractServerMessage(response.errorBody()?.string()))
-        }
+            phone = encoded,
+        )
+        SmsOutcome.Sent
+    } catch (e: HttpException) {
+        SmsOutcome.Rejected(e.code(), extractServerMessage(e.response()?.errorBody()?.string()))
     } catch (e: Throwable) {
         SmsOutcome.Failed(e.message ?: e.javaClass.simpleName)
     }
@@ -146,9 +140,6 @@ object AuthRepository {
 
     /**
      * 拉当前用户资料。登录态可用时返回 [UserVO]，否则 null。
-     *
-     * 用于「冷启动时确认 cookie 还有效」—— 若返回 401，[ApiException.Unauthorized]
-     * 由调用方捕获后清 [SessionStore]。
      */
     suspend fun fetchCurrentUser(): UserVO? = runCatching {
         ServiceLocator.profile.getUserInfo()
@@ -156,9 +147,6 @@ object AuthRepository {
 
     /**
      * 公共登录收尾：校验业务码 → 失败清空会话 → 成功返回结构化结果。
-     *
-     * cookie 的落盘由 [cn.apixiaoyuan.app.core.session.PersistentCookieJar] 在
-     * OkHttp 层完成，这里不再重复处理。
      */
     private suspend fun runLogin(block: suspend () -> LoginResponse): LoginOutcome = try {
         val response = block()
@@ -198,8 +186,6 @@ object AuthRepository {
      * ```
      * {"timestamp":1789645191184,"status":401,"message":"unauthorized"}
      * ```
-     * 成功响应不走这条路径（由各自的 converter 处理）。抽不出来时返回 null，
-     * 让调用方退回状态码文本。
      */
     private fun extractServerMessage(rawBody: String?): String? {
         if (rawBody.isNullOrBlank()) return null
