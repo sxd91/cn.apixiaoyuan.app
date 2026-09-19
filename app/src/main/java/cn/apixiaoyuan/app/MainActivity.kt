@@ -5,7 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -74,6 +77,13 @@ private fun AppShell() {
     // 背景录制层：内容层写入，底栏采样做折射。
     val backdrop = rememberLayerBackdrop()
 
+    // 悬浮底栏底部留白：12dp 视觉呼吸 + 手势条（navigationBars）。
+    // 对齐 cn.nizou.sxd 的 MainPagerScreen：
+    //   barBottomPadding = 12.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // 缺这段时底栏贴屏幕最底，lens() 的圆角 SDF 在边缘被裁，折射形状不完整。
+    val barBottomPadding = 12.dp +
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Box(Modifier.fillMaxSize()) {
         AppNavHost(
             navController = navController,
@@ -95,7 +105,9 @@ private fun AppShell() {
                 }
             },
             backdrop = backdrop,
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = barBottomPadding),
         )
     }
 }

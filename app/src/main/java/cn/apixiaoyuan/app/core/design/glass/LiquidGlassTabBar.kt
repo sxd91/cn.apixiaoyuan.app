@@ -221,7 +221,7 @@ fun LiquidGlassTabBar(
             onDragStarted = { position ->
                 gestureIndices[0] = currentIndex
                 gestureIndices[1] = indexAt(position.x)
-                snapToValue(gestureIndices[1].toFloat())
+                updateValue(gestureIndices[1].toFloat())
             },
             onDragStopped = {
                 val target = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
@@ -239,7 +239,11 @@ fun LiquidGlassTabBar(
             },
             onDrag = { _, dragAmount ->
                 if (tabWidthPx > 0f && dragAmount.x != 0f) {
-                    snapToValue(
+                    // 用 updateValue 而非 snapToValue：拖动中走 spring 动画，
+                    // velocityTracker 持续喂速度、pressProgress 保持弹簧进度；
+                    // snapTo 会让值瞬间跳到位，松手时 value == targetValue，
+                    // release() 里的弹簧等待被跳过，Q 弹回弹势能全丢。
+                    updateValue(
                         (targetValue + dragAmount.x / tabWidthPx * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat())
                     )
