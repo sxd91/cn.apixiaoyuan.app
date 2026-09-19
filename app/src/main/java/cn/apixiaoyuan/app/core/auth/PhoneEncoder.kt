@@ -12,7 +12,7 @@ import javax.crypto.Cipher
  * 明文直接返回 403 `{"status":403,"message":"验证码获取失败"}`。
  *
  * 算法与格式（逐行对照 smali 确证）：
- *  - `Cipher.getInstance("RSA/ECB/PKCS1PADDING", "BC")`，`ENCRYPT_MODE`
+ *  - `Cipher.getInstance("RSA/ECB/PKCS1PADDING")`，`ENCRYPT_MODE`
  *  - `doFinal(phone.getBytes("UTF-8"))`
  *  - `Lkv/a;->f([B, 2)` → `Base64.encodeToString(bytes, Base64.NO_WRAP)`
  *    （flag 2 = `NO_WRAP`，不换行，末尾也不补 `\n`）
@@ -24,7 +24,14 @@ import javax.crypto.Cipher
  * 与后续 `/verifier/android/validate`、`/accounts/android/safe/login` 无关
  * ——那两个接口的 `phone` 是**明文** `@Field`，不走这里。
  *
- * Android 自带 BouncyCastle（provider 名 `"BC"`），无需额外依赖。
+ * **provider 不指定，交给系统默认。**
+ * 原版 smali 写的是 `"BC"`（BouncyCastle），但：
+ *  - Android 9（API 28）起 BC 不再提供 `KeyFactory.RSA`；
+ *  - Android 7 起 RSA `Cipher` 也已从 BC 移到 `AndroidOpenSSL`。
+ * 照搬 `"BC"` 会在真机抛：
+ *   `NoSuchAlgorithmException: The BC provider no longer provides an implementation for KeyFactory.RSA`
+ * JCA 转换名（`"RSA"` / `"RSA/ECB/PKCS1PADDING"`）跨版本稳定，
+ * 不指定 provider 时系统选当前可用实现。
  */
 object PhoneEncoder {
 
@@ -37,10 +44,14 @@ object PhoneEncoder {
             "E2OnMijUZdkQk7etPJvZ2JOVXghthAGUUJkDUE8n2ZMNFKPjMrQJI49ewVzqWOKOvgU6Iu60Sn0xpei" +
             "etP1wWXBkszdV1WfNBJUo2hhPDnIPMGzzdfLW5rMu+tczeUriJQIDAQAB"
 
-    /** 公钥只解析一次。首次失败即抛，不做静默降级。 */
+    /**
+     * 公钥只解析一次。首次失败即抛，不做静默降级。
+     *
+     * 不指定 provider —— 指定 `"BC"` 在 Android 9+ 抛 `NoSuchAlgorithmException`。
+     */
     private val publicKey by lazy {
         val der = Base64.decode(PUBLIC_KEY_BASE64, Base64.DEFAULT)
-        KeyFactory.getInstance("RSA", "BC").generatePublic(X509EncodedKeySpec(der))
+        KeyFactory.getInstance("RSA").generatePublic(X509EncodedKeySpec(der))
     }
 
     /**
@@ -52,7 +63,8 @@ object PhoneEncoder {
      *         静默回退只会把真实原因藏起来，更难排查。
      */
     fun encode(phone: String): String = try {
-        val cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding", "BC")
+        // 不指定 provider：Android 7+ 的 RSA Cipher 由 AndroidOpenSSL 提供。
+        val cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
         cipher.init(Cipher.ENCRYPT_MODE, publicKey)
         val cipherBytes = cipher.doFinal(phone.toByteArray(Charsets.UTF_8))
         Base64.encodeToString(cipherBytes, Base64.NO_WRAP)
