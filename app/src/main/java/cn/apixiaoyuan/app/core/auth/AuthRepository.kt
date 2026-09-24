@@ -52,15 +52,17 @@ object AuthRepository {
      *
      * @param phone    手机号（原版此接口用明文，未观察到客户端加密）
      * @param password 密码（明文，原版就是明文 POST）
-     * @param yfdU     `YFD_U`。默认 null → 用设备指纹派生值，与原版口径一致。
+     * @param yfdU     `YFD_U`。默认取设备指纹派生值。
+     *                 注意原版 `passwordLogin` 首参是 **`J`（非空）**，
+     *                 因此这里不再是可空 `Long?`。
      */
     suspend fun loginByPassword(
         phone: String,
         password: String,
-        yfdU: Long? = null,
+        yfdU: Long = DeviceFingerprint.yfdU(),
     ): LoginOutcome = runLogin {
         ServiceLocator.gateway.passwordLogin(
-            yfdU = yfdU ?: DeviceFingerprint.yfdU(),
+            yfdU = yfdU,
             phone = phone,
             password = password,
         )

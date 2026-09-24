@@ -30,6 +30,9 @@ interface LeoGatewayService {
      * smali 签名：
      * `passwordLogin(JLjava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)`
      *
+     * 注意首参是 **`J`（primitive long，非空）** —— 与 [smsLogin] 的
+     * `Ljava/lang/Long;`（可空）不同。`@Query` 参数类型据此定为非空 `Long`。
+     *
      * @param yfdU     `@Query("YFD_U")` —— 猿辅导用户 ID。**首次登录传 0**。
      * @param phone    `@Field("phone")`
      * @param password `@Field("password")`
@@ -40,7 +43,7 @@ interface LeoGatewayService {
     @FormUrlEncoded
     @POST("/leo-gateway/android/auth/password")
     suspend fun passwordLogin(
-        @Query("YFD_U") yfdU: Long?,
+        @Query("YFD_U") yfdU: Long,
         @Field("phone") phone: String,
         @Field("password") password: String,
     ): LoginResponse
@@ -87,15 +90,73 @@ interface LeoGatewayService {
         @Field("token") token: String?,
     ): LoginResponse
 
-    // ---- 五条厂商登录：参数形状已从 smali 确证，但 @POST 路径未读出 ----
+    /**
+     * 阿里一键登录（运营商通道）。
+     *
+     * smali 签名：
+     * `aliLoginWithOperator(ILjava/lang/String;ZLjava/lang/String;Lkotlin/coroutines/Continuation;)`
+     *
+     * 四个业务参数（逐行来自 `LeoGatewayService.smali`）：
+     *  - p1 `I`            -> `@Field("operatorId")`
+     *  - p2 `String`       -> `@Field("token")`（非空）
+     *  - p3 `Z`            -> `@Field("autoRegister")`
+     *  - p4 `String?`      -> `@Field("pMask")` ← **此前未记录的新字段**
+     *
+     * 注意本方法**没有 `@Query("YFD_U")`** —— 与其余登录方法不同。
+     *
+     * @param pMask 脱敏标记位（推测）。原版此参可空，未确证语义前按可空落盘。
+     */
+    @BaseUrl(BASE_LEO)
+    @CheckNothing
+    @GsonConverter
+    @FormUrlEncoded
+    @POST("/leo-gateway/android/auth/ali-login-with-operator")
+    suspend fun aliLoginWithOperator(
+        @Field("operatorId") operatorId: Int,
+        @Field("token") token: String,
+        @Field("autoRegister") autoRegister: Boolean,
+        @Field("pMask") pMask: String?,
+    ): LoginResponse
+
+    /**
+     * 中国移动一键登录。
+     *
+     * smali 签名：
+     * `cmccLogin(Ljava/lang/String;Ljava/lang/String;ZLjava/lang/String;Lkotlin/coroutines/Continuation;)`
+     *
+     * 四个业务参数：
+     *  - p1 `String`   -> `@Field("token")`
+     *  - p2 `String?`  -> `@Field("phone")`
+     *  - p3 `Z`        -> `@Field("autoRegister")`
+     *  - p4 `String?`  -> `@Field("pMask")`
+     */
+    @BaseUrl(BASE_LEO)
+    @CheckNothing
+    @GsonConverter
+    @FormUrlEncoded
+    @POST("/leo-gateway/android/auth/cmcc")
+    suspend fun cmccLogin(
+        @Field("token") token: String,
+        @Field("phone") phone: String?,
+        @Field("autoRegister") autoRegister: Boolean,
+        @Field("pMask") pMask: String?,
+    ): LoginResponse
+
+    // ---- 四条厂商登录：路径与参数形状已从 smali 逐行确证 ----
     //
-    // huaweiLogin / honorLogin / vivoLogin / xiaomiLogin：
-    //   @Query("YFD_U") Long?, @Field("token") String?, @Field("autoRegister") Boolean
-    // cmccLogin：
-    //   @Field("token") String, @Field("phone") String?, @Field("autoRegister") Boolean, + 第四参
-    // aliLoginWithOperator：
-    //   @Field("operatorId") Int, @Field("token") String, @Field("autoRegister") Boolean, + 第四参
+    // huaweiLogin   POST /leo-gateway/android/auth/huawei-login
+    // honorLogin    POST /leo-gateway/android/auth/honor-login
+    // vivoLogin     POST /leo-gateway/android/auth/vivo-login
+    // xiaomiLogin   POST /leo-gateway/android/auth/xiaomi-login
     //
-    // 路径未确证前不写死 —— 写了错路径比不写更坏。
-    // 确证方法：读 LeoGatewayService.smali 对应方法的 @POST 注解。
+    // 四条签名完全一致：
+    //   `(Ljava/lang/Long;Ljava/lang/String;ZLkotlin/coroutines/Continuation;)`
+    //   p1 Long?   -> @Query("YFD_U")
+    //   p2 String? -> @Field("token")
+    //   p3 Z       -> @Field("autoRegister")
+    // **这四条均无 `pMask`**（与 ali/cmcc 不同，已逐块核对）。
+    //
+    // 未落盘原因：本工程暂不接厂商一键登录（需要各厂商 SDK 与 AppKey），
+    // 落空方法会被接口浏览器当成可用入口，造成误导。路径已记录在此，
+    // 待真正接入时按上面形状补。`docs/LOGIN-API.md` 的「待读」标记应更新为已确证。
 }

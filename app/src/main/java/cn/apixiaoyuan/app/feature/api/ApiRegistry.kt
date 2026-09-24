@@ -168,6 +168,34 @@ object ApiRegistry {
             ),
             note = "token 登录（会话续期 / 第三方渠道换登录态）",
         ))
+        add(ApiEndpoint(
+            group = "登录网关",
+            name = "aliLoginWithOperator",
+            method = "POST",
+            path = "/leo-gateway/android/auth/ali-login-with-operator",
+            baseUrl = "leo",
+            params = listOf(
+                ApiParam("operatorId", "Int", ParamIn.FIELD),
+                ApiParam("token", "String", ParamIn.FIELD),
+                ApiParam("autoRegister", "Boolean", ParamIn.FIELD, defaultValue = "false"),
+                ApiParam("pMask", "String", ParamIn.FIELD, required = false, note = "脱敏标记位（推测）"),
+            ),
+            note = "阿里一键登录（运营商通道）。注意无 YFD_U 参数",
+        ))
+        add(ApiEndpoint(
+            group = "登录网关",
+            name = "cmccLogin",
+            method = "POST",
+            path = "/leo-gateway/android/auth/cmcc",
+            baseUrl = "leo",
+            params = listOf(
+                ApiParam("token", "String", ParamIn.FIELD),
+                ApiParam("phone", "String", ParamIn.FIELD, required = false),
+                ApiParam("autoRegister", "Boolean", ParamIn.FIELD, defaultValue = "false"),
+                ApiParam("pMask", "String", ParamIn.FIELD, required = false, note = "脱敏标记位（推测）"),
+            ),
+            note = "中国移动一键登录",
+        ))
 
         // ---- LeoProfileApiService（主域）----
         add(ApiEndpoint(
