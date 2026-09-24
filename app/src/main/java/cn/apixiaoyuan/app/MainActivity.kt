@@ -24,7 +24,6 @@ import cn.apixiaoyuan.app.core.design.glass.TabItem
 import cn.apixiaoyuan.app.core.design.theme.ReverseOldGuyTheme
 import cn.apixiaoyuan.app.core.navigation.AppNavHost
 import cn.apixiaoyuan.app.core.navigation.RouteApi
-import cn.apixiaoyuan.app.core.navigation.RouteApk
 import cn.apixiaoyuan.app.core.navigation.RouteHome
 import cn.apixiaoyuan.app.core.navigation.RouteRepl
 import cn.apixiaoyuan.app.core.navigation.RouteSettings
@@ -63,7 +62,6 @@ private fun AppShell() {
     val tabs = remember {
         listOf(
             TabItem("首页", "Home"),
-            TabItem("APK", "Android"),
             TabItem("接口", "Api"),
             TabItem("请求台", "Terminal"),
             TabItem("设置", "Settings"),
@@ -71,7 +69,7 @@ private fun AppShell() {
     }
 
     val destinations = remember {
-        listOf<Any>(RouteHome, RouteApk, RouteApi, RouteRepl, RouteSettings)
+        listOf<Any>(RouteHome, RouteApi, RouteRepl, RouteSettings)
     }
 
     // 背景录制层：内容层写入，底栏采样做折射。

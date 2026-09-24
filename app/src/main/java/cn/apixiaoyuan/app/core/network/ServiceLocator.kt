@@ -3,6 +3,8 @@ package cn.apixiaoyuan.app.core.network
 import cn.apixiaoyuan.app.core.network.api.LeoEnglishExerciseWritingApiService
 import cn.apixiaoyuan.app.core.network.api.LeoExerciseCommonLegacyApiService
 import cn.apixiaoyuan.app.core.network.api.LeoGatewayService
+import cn.apixiaoyuan.app.core.network.api.LeoMathApiService
+import cn.apixiaoyuan.app.core.network.api.LeoOralApiService
 import cn.apixiaoyuan.app.core.network.api.LeoPoemsParadiseApiService
 import cn.apixiaoyuan.app.core.network.api.LeoProfileApiService
 import cn.apixiaoyuan.app.core.network.api.LeoShareApiService
@@ -47,6 +49,16 @@ object ServiceLocator {
 
     val exerciseLegacy: LeoExerciseCommonLegacyApiService by lazy {
         RetrofitFactory.leo(LeoExerciseCommonLegacyApiService::class.java)
+    }
+
+    /** 数学练习（出题链路：`/leo-math/android/exams/exercises/type/{type}`）。 */
+    val math: LeoMathApiService by lazy {
+        RetrofitFactory.leo(LeoMathApiService::class.java)
+    }
+
+    /** 口算出题与提交（`/leo-math/android/exams`）。 */
+    val oral: LeoOralApiService by lazy {
+        RetrofitFactory.leo(LeoOralApiService::class.java)
     }
 
     val englishExercise: LeoEnglishExerciseWritingApiService by lazy {

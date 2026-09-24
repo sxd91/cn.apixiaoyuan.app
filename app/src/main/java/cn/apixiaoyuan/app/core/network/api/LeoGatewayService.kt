@@ -40,7 +40,7 @@ interface LeoGatewayService {
     @FormUrlEncoded
     @POST("/leo-gateway/android/auth/password")
     suspend fun passwordLogin(
-        @Query("YFD_U") yfdU: Long,
+        @Query("YFD_U") yfdU: Long?,
         @Field("phone") phone: String,
         @Field("password") password: String,
     ): LoginResponse

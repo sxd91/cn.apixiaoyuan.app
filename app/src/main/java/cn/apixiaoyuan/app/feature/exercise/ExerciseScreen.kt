@@ -1,5 +1,8 @@
 package cn.apixiaoyuan.app.feature.exercise
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,7 +10,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,22 +24,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.model.ExerciseScopeKeypoint
 import cn.apixiaoyuan.app.core.model.ExerciseSection
+import cn.apixiaoyuan.app.core.model.ExerciseType
 import cn.apixiaoyuan.app.core.model.LeoUserCurrentExpData
+import cn.apixiaoyuan.app.core.navigation.RouteExam
 
 /**
  * 练习页。
  *
- * 展示当前账号的任务卡、经验进度与英语章节列表；
- * 数据来自 [ExerciseViewModel]，走已登录 cookie。
+ * 三段，自上而下：
+ *  1. **数学出题** —— 题型选择（口算练习 / 竖式计算 / 单位换算 …）+
+ *     题目数量选择（10 / 20 / 30 / 60 / 100）+ 知识点列表，点知识点出题。
+ *     题型与题量口径严格照原版 `nj/r` 枚举，见 [ExerciseType]。
+ *  2. **今日经验** —— `/leo-star/android/exercise/rank/pre-fetch`
+ *  3. **英语章节** —— `/leo-english/android/exercise/{type}`
  *
- * 顶栏由 [AppScaffold] 统一提供，statusBars 留白由它负责；
- * 悬浮玻璃底栏是浮层，内容不再为它预留 96dp —— 内容可以滑到底部被底栏遮住。
+ * 顶栏由 [AppScaffold] 统一提供；悬浮玻璃底栏是浮层，内容不再为它预留 96dp。
  */
 @Composable
 fun ExerciseScreen(
@@ -62,6 +71,10 @@ fun ExerciseScreen(
                 color = MaterialTheme.colorScheme.onSurface,
             )
 
+            // ---- 数学出题 ----
+            MathSection(viewModel, navController)
+
+            // ---- 概览 ----
             when {
                 viewModel.loading -> {
                     Box(
@@ -102,6 +115,198 @@ fun ExerciseScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * 数学出题段：题型选择 + 题量选择 + 知识点列表。
+ *
+ * 题型取自 [ExerciseType.practiceable]（排除纯展示/打印类），
+ * 题量取自当前题型的 [ExerciseType.chooseNumArray]。
+ * 题量行只在 `canChooseNum` 为 true 时出现 —— 对齐原版
+ * `nj/r.canChooseNum` 的显隐语义。
+ */
+@Composable
+private fun MathSection(
+    viewModel: ExerciseViewModel,
+    navController: NavHostController,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "数学练习",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+
+            // 题型选择
+            Text(
+                text = "题型",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ExerciseType.practiceable.forEach { type ->
+                    Chip(
+                        label = type.displayName,
+                        selected = type == viewModel.selectedType,
+                        onClick = { viewModel.selectType(type) },
+                    )
+                }
+            }
+
+            // 题量选择（仅 canChooseNum 题型显示，对齐原版）
+            if (viewModel.selectedType.canChooseNum) {
+                Text(
+                    text = "题目数量",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    viewModel.selectedType.chooseNumArray.forEach { num ->
+                        Chip(
+                            label = num.toString(),
+                            selected = num == viewModel.selectedNum,
+                            onClick = { viewModel.selectNum(num) },
+                        )
+                    }
+                }
+            }
+
+            // 知识点列表
+            when {
+                viewModel.mathLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                viewModel.mathError != null -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = viewModel.mathError ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { viewModel.retryMath() }) { Text("重试") }
+                    }
+                }
+
+                else -> {
+                    Text(
+                        text = "选择知识点开始练习",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    viewModel.keypoints.forEach { kp ->
+                        KeypointRow(
+                            keypoint = kp,
+                            onClick = {
+                                navController.navigate(
+                                    RouteExam(
+                                        keypointId = kp.id,
+                                        limit = viewModel.selectedNum,
+                                        title = kp.name ?: "练习",
+                                    )
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 单个知识点行：名称 + 已练次数 + 题量提示，整行可点进答题页。 */
+@Composable
+private fun KeypointRow(
+    keypoint: ExerciseScopeKeypoint,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = keypoint.name ?: "知识点 ${keypoint.id}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            val sub = buildString {
+                append("已练 ${keypoint.practiceCnt} 次")
+                if (keypoint.questionCnt > 0) {
+                    append(" · 默认 ${keypoint.questionCnt} 题")
+                }
+            }
+            Text(
+                text = sub,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** 胶囊选择器。选中态用 primaryContainer 高亮。 */
+@Composable
+private fun Chip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val bg = if (selected) MaterialTheme.colorScheme.primaryContainer
+    else MaterialTheme.colorScheme.surfaceContainerHighest
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+    else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = fg,
+        )
     }
 }
 

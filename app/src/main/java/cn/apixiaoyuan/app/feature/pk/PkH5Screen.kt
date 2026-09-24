@@ -88,21 +88,7 @@ fun PkH5Screen(
                 setAcceptCookie(true)
             }
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-            SessionStore.loadCookies().forEach { entry ->
-                val cookieString = buildString {
-                    append(entry.name).append('=').append(entry.value)
-                    append("; domain=").append(entry.domain)
-                    append("; path=").append(entry.path)
-                    if (entry.expiresAt > 0L) append("; expires=").append(entry.expiresAt)
-                    if (entry.secure) append("; Secure")
-                    if (entry.httpOnly) append("; HttpOnly")
-                }
-                CookieManager.getInstance().setCookie(
-                    "https://" + entry.domain,
-                    cookieString,
-                )
-            }
-            CookieManager.getInstance().flush()
+            syncCookiesToWebView(viewModel.h5Url)
             
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -225,6 +211,58 @@ fun PkH5Screen(
         }
     }
 }
+
+/**
+ * 把 [SessionStore] 里的登录态 cookie 同步进 WebView 的 CookieManager。
+ *
+ * 这是 H5 侧能识别登录态的唯一通道 —— CookieManager 与 OkHttp 的
+ * [cn.apixiaoyuan.app.core.session.PersistentCookieJar] 是两套独立存储。
+ *
+ * 三个必须踩对的点：
+ *
+ *  1. **URL 必须是合法 host**。真机 cookie 里 `ks_*` 那批挂在
+ *     `.yuanfudao.com`（带前导点，hostOnly=false），直接拼
+ *     `https://.yuanfudao.com` 不是合法 URL，`setCookie` 会静默失败。
+ *     这里去掉前导点，并对每个 cookie 各自的 domain 调一次。
+ *
+ *  2. **每个 cookie 按其 domain 落盘**，不能全塞到 H5 页面 host 下 ——
+ *     cookie 的 domain 归属由服务端 `Set-Cookie` 决定，WebView 发请求时
+ *     按 RFC 6265 匹配，放错域等于没放。
+ *
+ *  3. **expires 用 HTTP 日期格式**，不是 epoch 毫秒。
+ *     `CookieManager.setCookie` 解析 `Expires=` 时按 `EEE, dd MMM yyyy HH:mm:ss z`
+ *     解析，写数字会被忽略，cookie 退化成会话 cookie，WebView 进程一回收就丢。
+ *
+ * @param pageUrl H5 入口 URL，仅用于兜底 —— domain 为空的条目落到它上面。
+ */
+private fun syncCookiesToWebView(pageUrl: String) {
+    val cm = CookieManager.getInstance()
+    val fallbackHost = runCatching { java.net.URI(pageUrl).host }.getOrNull()
+
+    SessionStore.loadCookies().forEach { entry ->
+        if (entry.value.isEmpty()) return@forEach
+
+        val host = entry.domain.removePrefix(".").ifEmpty { fallbackHost ?: return@forEach }
+
+        val cookieString = buildString {
+            append(entry.name).append('=').append(entry.value)
+            append("; domain=").append(host)
+            append("; path=").append(entry.path.ifEmpty { "/" })
+            if (entry.expiresAt > 0L) {
+                append("; expires=").append(httpDate(entry.expiresAt))
+            }
+            if (entry.secure) append("; Secure")
+        }
+        cm.setCookie("https://$host", cookieString)
+    }
+    cm.flush()
+}
+
+/** epoch 毫秒 → HTTP 日期（`EEE, dd MMM yyyy HH:mm:ss z`，GMT）。 */
+private fun httpDate(epochMillis: Long): String =
+    java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss 'GMT'", java.util.Locale.US)
+        .apply { timeZone = java.util.TimeZone.getTimeZone("GMT") }
+        .format(java.util.Date(epochMillis))
 
 /**
  * 拦截 `leo://` scheme。

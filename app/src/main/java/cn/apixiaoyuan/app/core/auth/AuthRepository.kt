@@ -48,17 +48,19 @@ object AuthRepository {
     /**
      * 密码登录。
      *
-     * @param phone    手机号
-     * @param password 密码（明文，原版就是明文 POST，未观察到客户端加密）
-     * @param yfdU     猿辅导用户 ID。**首次登录传 0**。
+     * 走网关版 [ServiceLocator.gateway]（主域 `/leo-gateway/android/auth/password`）。
+     *
+     * @param phone    手机号（原版此接口用明文，未观察到客户端加密）
+     * @param password 密码（明文，原版就是明文 POST）
+     * @param yfdU     `YFD_U`。默认 null → 用设备指纹派生值，与原版口径一致。
      */
     suspend fun loginByPassword(
         phone: String,
         password: String,
-        yfdU: Long = 0L,
+        yfdU: Long? = null,
     ): LoginOutcome = runLogin {
         ServiceLocator.gateway.passwordLogin(
-            yfdU = yfdU,
+            yfdU = yfdU ?: DeviceFingerprint.yfdU(),
             phone = phone,
             password = password,
         )
@@ -67,21 +69,39 @@ object AuthRepository {
     /**
      * 短信验证码登录。
      *
-     * @param autoRegister 未注册手机号是否自动注册
+     * **走直连版** [cn.apixiaoyuan.app.core.network.api.YtkApiService.smsLogin]
+     * （`ape-api.yuanfudao.com` 的 `/accounts/android/safe/login`），
+     * 与原版 `wo/d.smali` 的调用链一致。
+     *
+     * 三条参数事实（逐行来自 `wo/d.smali:630-694`）：
+     *  - `phone` 与 `verification` **都传 RSA 密文**（各调一次 `Lkv/k;->b`）
+     *  - `YFD_U` 用**设备指纹派生值**，不是会话里的用户 ID
+     *  - `autoRegister` **硬编码 true**（原版行为，新用户自动注册）
+     *
+     * @param autoRegister 未注册手机号是否自动注册。默认 true，对齐原版。
      */
     suspend fun loginBySms(
         phone: String,
         verification: String,
-        autoRegister: Boolean = false,
+        autoRegister: Boolean = true,
         yfdU: Long? = null,
-    ): LoginOutcome = runLogin {
-        ServiceLocator.gateway.smsLogin(
-            yfdU = yfdU ?: SessionStore.yfdU,
-            phone = phone,
-            verification = verification,
+    ): LoginOutcome = runCatching {
+        val encodedPhone = PhoneEncoder.encode(phone)
+        val encodedVerification = PhoneEncoder.encode(verification)
+        ServiceLocator.ytkApi.smsLogin(
+            yfdU = yfdU ?: DeviceFingerprint.yfdU(),
+            phone = encodedPhone,
+            verification = encodedVerification,
             autoRegister = autoRegister,
         )
-    }
+    }.fold(
+        onSuccess = { account ->
+            // 直连版返回 UserAccount（无业务码信封），非空即成功。
+            // 登录态由 Set-Cookie 承载，PersistentCookieJar 已自动落盘。
+            LoginOutcome.Success(user = null)
+        },
+        onFailure = { e -> mapLoginError(e) },
+    )
 
     /**
      * 短信验证码发送结果。
@@ -116,7 +136,8 @@ object AuthRepository {
     suspend fun sendSmsCode(phone: String): SmsOutcome = try {
         val encoded = PhoneEncoder.encode(phone)
         ServiceLocator.ytkApi.smsVerify(
-            yfdU = SessionStore.yfdU.takeIf { SessionStore.isLoggedIn },
+            // 与原版一致：用设备指纹派生值，未登录时也传（设备级频控键）。
+            yfdU = DeviceFingerprint.yfdU(),
             phone = encoded,
         )
         SmsOutcome.Sent
@@ -177,6 +198,23 @@ object AuthRepository {
         LoginOutcome.Failed(-2, "响应解析失败")
     } catch (e: Throwable) {
         LoginOutcome.Failed(-3, e.message ?: "未知错误")
+    }
+
+    /**
+     * 把异常映射成 [LoginOutcome.Failed]。
+     *
+     * 供直连版 `smsLogin`（返回 [UserAccount]，无业务码信封）复用；
+     * 网关版走 [runLogin]，其 catch 分支与本方法口径一致。
+     */
+    private fun mapLoginError(e: Throwable): LoginOutcome = when (e) {
+        is HttpException -> {
+            val serverMsg = extractServerMessage(e.response()?.errorBody()?.string())
+            LoginOutcome.Failed(e.code(), serverMsg ?: "HTTP ${e.code()}")
+        }
+        is ApiException.Http -> LoginOutcome.Failed(e.status, "HTTP ${e.status}")
+        is ApiException.Network -> LoginOutcome.Failed(-1, "网络错误：${e.message}")
+        is ApiException.Parse -> LoginOutcome.Failed(-2, "响应解析失败")
+        else -> LoginOutcome.Failed(-3, e.message ?: "未知错误")
     }
 
     /**

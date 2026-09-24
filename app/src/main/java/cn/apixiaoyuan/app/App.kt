@@ -10,6 +10,7 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import cn.apixiaoyuan.app.core.network.RetrofitFactory
 import cn.apixiaoyuan.app.core.network.NetworkConfig
+import cn.apixiaoyuan.app.core.auth.DeviceFingerprint
 import cn.apixiaoyuan.app.core.database.AppDatabase
 import cn.apixiaoyuan.app.core.native.NativeDecodeInstaller
 import cn.apixiaoyuan.app.core.session.SessionStore
@@ -46,6 +47,10 @@ class App : Application() {
         // 会话存储：必须在 RetrofitFactory.init 之前，因为 init 会立即
         // 取用 SessionStore.snapshot() 作为 sessionProvider 的闭包。
         SessionStore.init(this)
+
+        // 设备指纹：YFD_U 的取值来源（`Lds/i3` 链路复刻）。
+        // 登录/发码接口都用它作设备级频控键，必须在任何登录动作之前就绪。
+        DeviceFingerprint.init(this)
 
         // 网络底座：必须先于任何 ServiceLocator.xxx 的首次访问。
         // 域名来自 NetworkConfig，由 mg/h.smali 的 d()/w() 方法链逐行确证。

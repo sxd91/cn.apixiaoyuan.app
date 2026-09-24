@@ -1,6 +1,9 @@
 package cn.apixiaoyuan.app.core.exercise
 
+import cn.apixiaoyuan.app.core.model.ExamData
 import cn.apixiaoyuan.app.core.model.ExerciseEnglishSectionVO
+import cn.apixiaoyuan.app.core.model.ExerciseScopeData
+import cn.apixiaoyuan.app.core.model.ExerciseType
 import cn.apixiaoyuan.app.core.model.LeoCurrentTaskInfo
 import cn.apixiaoyuan.app.core.model.LeoUserCurrentExpData
 import cn.apixiaoyuan.app.core.network.ServiceLocator
@@ -74,5 +77,73 @@ object ExerciseRepository {
             semester = semester,
             book = book,
         )
+    }.getOrNull()
+
+    /**
+     * 按类型拉数学练习知识点树（出题链路第一步）。
+     *
+     * GET `/leo-math/android/exams/exercises/type/{type}`。
+     *
+     * 这是「10 以内加减法 + 题目数量可选」的入口：`type` 传
+     * [ExerciseType.exerciseType]（口算练习 = 0），拿到 `ExerciseScopeData`
+     * 后从 `sections[].keypoints[]` 里挑一个知识点，再用它的 `id` 作为
+     * `keypointId` 进答题页（原版 `QuickExerciseActivity`）。
+     *
+     * 四个参数都是原始 int（原版签名 `(IIII...)` 无 nullable）：
+     *  - type     出题类型，见 [ExerciseType]
+     *  - grade    年级 ID
+     *  - semester 学期（1 上 / 2 下）
+     *  - book     教材版本
+     *
+     * 失败返回 null，UI 显示空态。
+     */
+    suspend fun fetchMathScope(
+        type: ExerciseType,
+        grade: Int,
+        semester: Int,
+        book: Int,
+    ): ExerciseScopeData? = runCatching {
+        ServiceLocator.math.getExercisesKeyPoints(
+            type = type.exerciseType,
+            grade = grade,
+            semester = semester,
+            book = book,
+        )
+    }.getOrNull()
+
+    /**
+     * 出题：按知识点生成一整套练习（出题链路第二步）。
+     *
+     * POST `/leo-math/android/exams`，FormUrlEncoded。
+     *
+     * @param keypointId 知识点 ID，来自 [ExerciseScopeKeypoint.id]
+     * @param limit      题目数量，取自 [ExerciseType.chooseNumArray]
+     *
+     * 失败返回 null，UI 显示错误。
+     */
+    suspend fun fetchExam(
+        keypointId: Int,
+        limit: Int,
+    ): ExamData? = runCatching {
+        ServiceLocator.oral.getExamInfo(
+            keypointId = keypointId.toString(),
+            limit = limit.toString(),
+        )
+    }.getOrNull()
+
+    /**
+     * 提交练习结果（出题链路第四步）。
+     *
+     * PUT `/leo-math/android/exams/v2/{examId}`，body 带 `@NeedEncode`。
+     *
+     * 提交前调用方须把 [ExamData.questions] 里每题填好
+     * `userAnswer` / `status` / `costTime`（**下限 300ms**），
+     * 以及整卷的 `correctCnt` / `costTime`。
+     *
+     * 失败返回 null。
+     */
+    suspend fun uploadExam(body: ExamData): ExamData? = runCatching {
+        val examId = body.idString ?: return@runCatching null
+        ServiceLocator.oral.uploadExamResult(examId = examId, body = body)
     }.getOrNull()
 }

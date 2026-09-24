@@ -54,7 +54,13 @@ class AuthInterceptor(
 
         // 账号域必注入；主域有值也注入 —— 真机 userid cookie 挂在
         // `yuanfudao.com` 全域，主域请求同样带 YFD_U。
-        if (snapshot?.yfdU != null && snapshot.yfdU > 0L) {
+        //
+        // 关键：只在请求**未显式携带** YFD_U 时才注入。
+        // 登录/发码接口自己传的是设备指纹（DeviceFingerprint，设备级频控键），
+        // 与这里的 userid（用户级）语义不同；setQueryParameter 会覆盖已存在的
+        // 同名参数，无条件注入会把设备指纹冲掉。
+        val hasExplicitYfdU = request.url.queryParameter("YFD_U") != null
+        if (!hasExplicitYfdU && snapshot?.yfdU != null && snapshot.yfdU > 0L) {
             val withQuery = request.url.newBuilder()
                 .setQueryParameter("YFD_U", snapshot.yfdU.toString())
                 .build()
