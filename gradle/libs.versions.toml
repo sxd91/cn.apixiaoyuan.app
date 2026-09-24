@@ -33,6 +33,7 @@ androidx-material-icons-core = { module = "androidx.compose.material:material-ic
 miuix-blur = { module = "top.yukonga.miuix.kmp:miuix-blur-android", version.ref = "miuix" }
 miuix-shader = { module = "top.yukonga.miuix.kmp:miuix-shader-android", version.ref = "miuix" }
 miuix-nav = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = "miuix" }
+miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui-android", version.ref = "miuix" }
 materialkolor = { module = "com.materialkolor:material-kolor", version.ref = "materialkolor" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }

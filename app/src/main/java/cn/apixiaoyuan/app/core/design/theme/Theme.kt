@@ -42,10 +42,20 @@ fun ReverseOldGuyTheme(
     )
 
     SideEffect { App.colorScheme = scheme }
-
+    // Material3 主题（现有页面）与 miuix 主题（miuix 组件）并存：
+    // 外层 MaterialExpressiveTheme 提供 MaterialTheme.colorScheme，
+    // 内层 AppMiuixTheme 提供 MiuixTheme.colorScheme，两者共用同一套
+    // 种子色 / 风格 / 规范版本，因此配色一致。
     MaterialExpressiveTheme(
         colorScheme = scheme,
         motionScheme = MotionScheme.expressive(),
-        content = content,
-    )
+    ) {
+        AppMiuixTheme(
+            darkTheme = darkTheme,
+            paletteStyle = paletteStyle,
+            colorSpec = colorSpec,
+            seedColor = seedColor,
+            content = content,
+        )
+    }
 }

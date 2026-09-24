@@ -109,10 +109,13 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.compose.ui.tooling.preview)
 
-    // --- miuix（LiquidGlass 悬浮底栏 / shader / nav） ---
+    // --- miuix（LiquidGlass 悬浮底栏 / shader / nav / 主题与基础组件） ---
     implementation(libs.miuix.blur)
     implementation(libs.miuix.shader)
     implementation(libs.miuix.nav)
+    // miuix-ui：MiuixTheme + ThemeController（莫奈取色）+ SmallTopAppBar 等基础组件。
+    // 用于主题根切换与顶部渐变模糊顶栏；悬浮底栏仍走 miuix-blur，不受影响。
+    implementation(libs.miuix.ui)
 
     // --- MaterialSymbols 图标库 ---
     // 只引 outlined：filled 变体本地缓存无该产物、包结构未经解包验证，
