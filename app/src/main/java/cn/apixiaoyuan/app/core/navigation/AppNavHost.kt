@@ -12,6 +12,7 @@ import cn.apixiaoyuan.app.feature.exercise.ExamScreen
 import cn.apixiaoyuan.app.feature.exercise.ExerciseScreen
 import cn.apixiaoyuan.app.feature.home.HomeScreen
 import cn.apixiaoyuan.app.feature.login.LoginScreen
+import cn.apixiaoyuan.app.feature.oldsimian.OldSimianScreen
 import cn.apixiaoyuan.app.feature.pk.PkScreen
 import cn.apixiaoyuan.app.feature.repl.ReplScreen
 import cn.apixiaoyuan.app.feature.samples.SamplesScreen
@@ -56,9 +57,19 @@ data class RouteExam(
 
 @Serializable
 object RouteLogin
-
 @Serializable
 object RouteSettings
+
+/**
+ * 「老挂戏老叟」功能页路由。
+ *
+ * 从设置页的入口进入，是二级页（不带参）。
+ * 页面自身用本项目 AppScaffold + miuix 组件搭建，与参考项目 cn.nizou.sxd
+ * 的页面无任何复用关系。
+ */
+@Serializable
+object RouteOldSimian
+
 
 /**
  * 全应用导航图。
@@ -98,5 +109,6 @@ fun AppNavHost(
         }
         composable<RouteLogin> { LoginScreen(navController) }
         composable<RouteSettings> { SettingsScreen(navController) }
+        composable<RouteOldSimian> { OldSimianScreen(navController) }
     }
 }

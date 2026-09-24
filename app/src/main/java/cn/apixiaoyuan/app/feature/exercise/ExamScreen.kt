@@ -31,6 +31,7 @@ import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.design.component.AppScaffold
 import cn.apixiaoyuan.app.core.model.ExamData
 import cn.apixiaoyuan.app.core.model.ExamQuestion
+import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 
 /**
  * 答题页。
@@ -122,6 +123,8 @@ fun ExamScreen(
                         total = exam.questions.orEmpty().size,
                         submitting = viewModel.submitting,
                         submitted = viewModel.submitted,
+                        // 自动全部答对开启时，未作答也可提交（提交体会填正确答案）。
+                        autoCorrect = OldSimianPrefs.autoCorrect,
                         onSubmit = { viewModel.submit() },
                     )
                 }
@@ -266,6 +269,7 @@ private fun SubmitBar(
     total: Int,
     submitting: Boolean,
     submitted: Boolean,
+    autoCorrect: Boolean,
     onSubmit: () -> Unit,
 ) {
     Card(
@@ -283,7 +287,11 @@ private fun SubmitBar(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = if (submitted) "已提交" else "已作答 $answeredCount / $total",
+                text = when {
+                    submitted -> "已提交"
+                    autoCorrect -> "自动全部答对 · 已作答 $answeredCount / $total"
+                    else -> "已作答 $answeredCount / $total"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (submitted) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -294,7 +302,8 @@ private fun SubmitBar(
             } else if (!submitted) {
                 TextButton(
                     onClick = onSubmit,
-                    enabled = answeredCount > 0,
+                    // 自动全部答对开启时不需要手动作答，直接可提交。
+                    enabled = autoCorrect || answeredCount > 0,
                 ) {
                     Text("提交")
                 }

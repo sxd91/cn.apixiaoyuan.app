@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import cn.apixiaoyuan.app.core.exercise.ExerciseRepository
 import cn.apixiaoyuan.app.core.model.ExamData
 import cn.apixiaoyuan.app.core.model.ExamQuestion
+import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
@@ -158,35 +159,51 @@ class ExamViewModel : ViewModel() {
     /**
      * 组装提交体。
      *
-     * 逐题：填 `userAnswer`（用标记）、`status`（1 / -1）、`costTime`
+     * 逐题：填 `userAnswer`、`status`（1 / -1）、`costTime`
      * （**下限 300ms**，不足补到 300 —— 原版服务端校验）。
      * 整卷：`correctCnt` = 答对题数，`costTime` = 各题之和。
+     *
+     * **「老挂戏老叟」开关接入点**（本项目是内置客户端，这里改的是自己
+     * 组装的请求体，不是 hook 宿主内存对象）：
+     *  - [OldSimianPrefs.autoCorrect]：每题 `userAnswer` 取服务端下发的
+     *    正确答案（`ExamQuestion.rightAnswer`，即 `answers.first()`），
+     *    `status = STATUS_RIGHT`，整卷自然全对；
+     *  - [OldSimianPrefs.customCostEnabled]：每题 `costTime` 固定为
+     *    [OldSimianPrefs.customCostMs]（存储层已保证 ≥ 300ms）。
      */
     private fun buildSubmitBody(current: ExamData): ExamData {
+        val autoCorrect = OldSimianPrefs.autoCorrect
         var totalCost = 0L
         var correctCount = 0
 
         val newQuestions = current.questions.orEmpty().map { q ->
             val mark = answers[q.id]
-            // 未作答的题按答错处理（status = -1），与原版「未做题计错」一致。
-            val status = if (mark == RIGHT_MARK) ExamQuestion.STATUS_RIGHT
+
+            // 未作答的题按答错处理（status = -1），与原版「未做题计错」一致；
+            // 自动全对开启时忽略作答状态，一律按答对提交。
+            val status = if (autoCorrect || mark == RIGHT_MARK) ExamQuestion.STATUS_RIGHT
             else ExamQuestion.STATUS_WRONG
+
+            val userAnswer = if (autoCorrect) q.rightAnswer ?: mark ?: ""
+            else mark ?: ""
 
             // costTime 下限 300ms；未作答的题给一个随机值（300..450），
             // 避免全部相同被风控识别（cn.nizou.sxd 同款做法）。
             val raw = costTimes[q.id] ?: 0L
-            val cost = if (raw < ExamQuestion.MIN_COST_TIME_MS) {
-                if (mark == null) Random.nextLong(
+            val base = if (raw < ExamQuestion.MIN_COST_TIME_MS) {
+                if (mark == null && !autoCorrect) Random.nextLong(
                     ExamQuestion.MIN_COST_TIME_MS,
                     ExamQuestion.MIN_COST_TIME_MS + 150,
                 ) else ExamQuestion.MIN_COST_TIME_MS
             } else raw
+            // 自定义结算时间：开启后每题耗时统一为配置值，否则用实测值。
+            val cost = OldSimianPrefs.costTimeFor(base)
 
             totalCost += cost
             if (status == ExamQuestion.STATUS_RIGHT) correctCount++
 
             q.copy(
-                userAnswer = mark ?: "",
+                userAnswer = userAnswer,
                 status = status,
                 costTime = cost,
             )

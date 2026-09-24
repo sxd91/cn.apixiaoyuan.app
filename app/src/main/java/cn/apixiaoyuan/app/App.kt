@@ -13,6 +13,7 @@ import cn.apixiaoyuan.app.core.network.NetworkConfig
 import cn.apixiaoyuan.app.core.auth.DeviceFingerprint
 import cn.apixiaoyuan.app.core.database.AppDatabase
 import cn.apixiaoyuan.app.core.native.NativeDecodeInstaller
+import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import cn.apixiaoyuan.app.core.session.SessionStore
 
 /**
@@ -72,5 +73,10 @@ class App : Application() {
         // 数据库：模块 12-13。八表实体 + SampleDao + AppDatabase。
         // 只建库不迁数据，初始化无副作用；放最后，不干扰网络与会话链路。
         AppDatabase.init(this)
+
+        // 「老挂戏老叟」功能开关：纯本地配置（SharedPreferences），
+        // 与网络/会话链路无耦合，放最后初始化即可。
+        // 必须在首次进入设置页或练习页之前就绪，否则 OldSimianPrefs.prefs() 会抛错。
+        OldSimianPrefs.init(this)
     }
 }

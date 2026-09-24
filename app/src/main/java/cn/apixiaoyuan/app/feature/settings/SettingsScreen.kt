@@ -1,6 +1,7 @@
 package cn.apixiaoyuan.app.feature.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.navigation.RouteOldSimian
 
 /**
  * 设置页 —— 移植「老挂戏老叟」（cn.nizou.sxd）SettingsScreen 的主题 + 配置两段。
@@ -45,6 +47,11 @@ fun SettingsScreen(navController: NavHostController) {
                 SettingRow(title = "底栏效果", description = "液态玻璃 / 毛玻璃 / 纯色")
             }
             SettingGroup(title = "配置") {
+                SettingRow(
+                    title = "老挂戏老叟",
+                    description = "练习自动答对 / 自定义结算时间（后续批次：刷分、画笔）",
+                    onClick = { navController.navigate(RouteOldSimian) },
+                )
                 SettingRow(title = "导出配置", description = "将全部设置保存为 JSON 文件")
                 SettingRow(title = "导入配置", description = "从 JSON 文件恢复设置")
             }
@@ -86,8 +93,8 @@ private fun SettingRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp)
-            .then(if (onClick != null) Modifier else Modifier),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Text(
             text = title,
