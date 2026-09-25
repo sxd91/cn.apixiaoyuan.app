@@ -9,6 +9,7 @@ import cn.apixiaoyuan.app.core.exercise.ExerciseRepository
 import cn.apixiaoyuan.app.core.model.ExamData
 import cn.apixiaoyuan.app.core.model.ExamQuestion
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
+import cn.apixiaoyuan.app.core.oldsimian.OralStrokes
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
@@ -168,36 +169,70 @@ class ExamViewModel : ViewModel() {
      *  - [OldSimianPrefs.autoCorrect]：每题 `userAnswer` 取服务端下发的
      *    正确答案（`ExamQuestion.rightAnswer`，即 `answers.first()`），
      *    `status = STATUS_RIGHT`，整卷自然全对；
+     *  - [OldSimianPrefs.customAnswerEnabled] + `customAnswerText`：
+     *    `userAnswer` 固定为自定义答案，`status` 按它是否等于正确答案判定；
+     *  - [OldSimianPrefs.strokeEnabled]：每题 `script` 由 [OralStrokes] 按
+     *    该题实际提交的 `userAnswer` 生成（「按题目数量提交等量画笔」）；
      *  - [OldSimianPrefs.customCostEnabled]：每题 `costTime` 固定为
      *    [OldSimianPrefs.customCostMs]（存储层已保证 ≥ 300ms）。
      */
     private fun buildSubmitBody(current: ExamData): ExamData {
         val autoCorrect = OldSimianPrefs.autoCorrect
+        val customAnswer = OldSimianPrefs.customAnswerText.trim()
+        val useCustomAnswer = OldSimianPrefs.customAnswerEnabled && customAnswer.isNotEmpty()
+        val useStrokes = OldSimianPrefs.strokeEnabled
         var totalCost = 0L
         var correctCount = 0
 
         val newQuestions = current.questions.orEmpty().map { q ->
             val mark = answers[q.id]
-
-            // 未作答的题按答错处理（status = -1），与原版「未做题计错」一致；
-            // 自动全对开启时忽略作答状态，一律按答对提交。
-            val status = if (autoCorrect || mark == RIGHT_MARK) ExamQuestion.STATUS_RIGHT
-            else ExamQuestion.STATUS_WRONG
-
-            val userAnswer = if (autoCorrect) q.rightAnswer ?: mark ?: ""
-            else mark ?: ""
+            // 是否答对（作答标记为「对」）。
+            val answeredRight = mark == RIGHT_MARK
+            // 提交的作答文本，优先级：自动全对 > 自定义答案 > 用户答对时回填正确答案。
+            //
+            // 注意：本项目 UI 是「对 / 错」按钮，拿不到用户真实手写文本，因此
+            // **绝不能把内部标记 `"right"` / `"wrong"` 当 `userAnswer` 提交**
+            // （这是 B1 遗留缺陷）。用户答对时用服务端下发的正确答案回填 ——
+            // 答对即意味着他写的就是它，这不是伪造，只是补齐原版必然携带的字段。
+            val userAnswer = when {
+                autoCorrect || useCustomAnswer -> OldSimianPrefs.answerFor(q.rightAnswer, null)
+                answeredRight -> q.rightAnswer ?: ""
+                else -> ""
+            }
+            // `status` 与 `userAnswer` 必须自洽：
+            //  - 自动全对   → 恒判对；
+            //  - 自定义答案 → 看它是否恰好等于正确答案（不伪造判分）；
+            //  - 否则       → 按用户实际作答。
+            val correct = when {
+                autoCorrect -> true
+                useCustomAnswer -> userAnswer == q.rightAnswer
+                else -> answeredRight
+            }
+            val status = if (correct) ExamQuestion.STATUS_RIGHT else ExamQuestion.STATUS_WRONG
 
             // costTime 下限 300ms；未作答的题给一个随机值（300..450），
-            // 避免全部相同被风控识别（cn.nizou.sxd 同款做法）。
+            // 避免整卷耗时完全相同被风控识别（cn.nizou.sxd 同款做法）。
+            // 「未作答」= 用户没点过，且没有开启任何代答（自动全对 / 自定义答案）。
             val raw = costTimes[q.id] ?: 0L
+            val answered = mark != null
             val base = if (raw < ExamQuestion.MIN_COST_TIME_MS) {
-                if (mark == null && !autoCorrect) Random.nextLong(
+                if (!answered && !autoCorrect && !useCustomAnswer) Random.nextLong(
                     ExamQuestion.MIN_COST_TIME_MS,
                     ExamQuestion.MIN_COST_TIME_MS + 150,
                 ) else ExamQuestion.MIN_COST_TIME_MS
             } else raw
             // 自定义结算时间：开启后每题耗时统一为配置值，否则用实测值。
             val cost = OldSimianPrefs.costTimeFor(base)
+
+            // 提交画笔：按本题实际提交的作答文本生成笔迹 JSON。
+            // 「按题目数量提交等量画笔」—— 有 N 道题就生成 N 条 script。
+            // 生成失败（答案为空 / 全是字形表里没有的字符）时保留原 script，
+            // 不写空数组（空笔迹比无笔迹更异常）。
+            val script = if (useStrokes) {
+                OralStrokes.scriptJson(userAnswer) ?: q.script
+            } else {
+                q.script
+            }
 
             totalCost += cost
             if (status == ExamQuestion.STATUS_RIGHT) correctCount++
@@ -206,6 +241,7 @@ class ExamViewModel : ViewModel() {
                 userAnswer = userAnswer,
                 status = status,
                 costTime = cost,
+                script = script,
             )
         }
 

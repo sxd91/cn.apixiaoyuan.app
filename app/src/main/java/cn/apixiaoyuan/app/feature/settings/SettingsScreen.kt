@@ -49,7 +49,7 @@ fun SettingsScreen(navController: NavHostController) {
             SettingGroup(title = "配置") {
                 SettingRow(
                     title = "老挂戏老叟",
-                    description = "练习自动答对 / 自定义结算时间（后续批次：刷分、画笔）",
+                    description = "练习代答 / 提交画笔 / 结算时间 / PK 自动化",
                     onClick = { navController.navigate(RouteOldSimian) },
                 )
                 SettingRow(title = "导出配置", description = "将全部设置保存为 JSON 文件")

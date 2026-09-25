@@ -109,6 +109,11 @@ fun ExamScreen(
 
                 viewModel.exam != null -> {
                     val exam = viewModel.exam!!
+                    // 任一代答开关开启时，未作答也可提交（提交体会填好作答）。
+                    // 读 prefs 的可观察状态 → 设置页改动后本页立即重组。
+                    val autoAnswer = OldSimianPrefs.autoCorrect ||
+                        (OldSimianPrefs.customAnswerEnabled &&
+                            OldSimianPrefs.customAnswerText.isNotBlank())
                     ExamHeader(exam = exam, limit = limit)
                     exam.questions.orEmpty().forEachIndexed { index, q ->
                         QuestionCard(
@@ -123,8 +128,7 @@ fun ExamScreen(
                         total = exam.questions.orEmpty().size,
                         submitting = viewModel.submitting,
                         submitted = viewModel.submitted,
-                        // 自动全部答对开启时，未作答也可提交（提交体会填正确答案）。
-                        autoCorrect = OldSimianPrefs.autoCorrect,
+                        autoAnswer = autoAnswer,
                         onSubmit = { viewModel.submit() },
                     )
                 }
@@ -269,7 +273,7 @@ private fun SubmitBar(
     total: Int,
     submitting: Boolean,
     submitted: Boolean,
-    autoCorrect: Boolean,
+    autoAnswer: Boolean,
     onSubmit: () -> Unit,
 ) {
     Card(
@@ -289,7 +293,7 @@ private fun SubmitBar(
             Text(
                 text = when {
                     submitted -> "已提交"
-                    autoCorrect -> "自动全部答对 · 已作答 $answeredCount / $total"
+                    autoAnswer -> "代答已开启 · 已作答 $answeredCount / $total"
                     else -> "已作答 $answeredCount / $total"
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -302,8 +306,8 @@ private fun SubmitBar(
             } else if (!submitted) {
                 TextButton(
                     onClick = onSubmit,
-                    // 自动全部答对开启时不需要手动作答，直接可提交。
-                    enabled = autoCorrect || answeredCount > 0,
+                    // 代答开启时不需要手动作答，直接可提交。
+                    enabled = autoAnswer || answeredCount > 0,
                 ) {
                     Text("提交")
                 }

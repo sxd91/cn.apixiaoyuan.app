@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import cn.apixiaoyuan.app.core.oldsimian.PkJsInjector
 import cn.apixiaoyuan.app.core.session.SessionStore
 
 /**
@@ -94,11 +95,18 @@ fun PkH5Screen(
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     viewModel.setProgress(5)
                     viewModel.webError = null
+                    // 重置注入标记：同一次加载 onPageFinished 可能回调多次，
+                    // 不重置会导致「老挂戏老叟」脚本被叠加注入多轮。
+                    view?.let { PkJsInjector.markPageStarted(it) }
                 }
                 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     viewModel.setProgress(100)
                     view?.title?.takeIf { it.isNotBlank() }?.let { viewModel.webTitle = it }
+                    // 「老挂戏老叟」PK 侧注入：去排行榜动效 / 结算页自动开下一局。
+                    // 本项目 PK 容器是自己的 WebView，直接 evaluateJavascript 即可，
+                    // 不需要像 cn.nizou.sxd 那样 hook 宿主的 loadUrl。
+                    view?.let { PkJsInjector.injectIfEnabled(it) }
                 }
                 
                 override fun onReceivedError(
