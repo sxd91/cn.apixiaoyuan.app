@@ -50,7 +50,11 @@ object AccountRepository {
      */
     suspend fun fetchCurrentUser(): UserVO? = runCatching {
         ServiceLocator.profile.getUserInfo()
-    }.getOrNull()
+    }.getOrNull().also { vo ->
+        // 年级落会话：PK 入口数据按年级取（PkViewModel 读它），
+        // 登录响应 UserAccount 不带 grade，只有 UserVO 有。
+        vo?.grade?.takeIf { it > 0 }?.let { SessionStore.saveGrade(it) }
+    }
 
     /**
      * 拉子账号 ID 列表（含主账号自己）。

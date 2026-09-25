@@ -42,17 +42,39 @@ object PkRepository {
     /**
      * 拉诗词 PK 入口数据（`getPoemsPkEntryData`）。
      *
-     * 注意这个方法名里的 `Poems` 容易误导 —— 它走的是
-     * `/leo-game-pk/android/game/homepage`，是**通用 PK 入口**，
-     * 诗词只是其中一种玩法。原版把它放在 `LeoPoemsParadiseApiService`
-     * 里是历史归类问题，不改动。
-     *
-     * 返回 `JsonElement` 占位 —— 该接口的真实返回结构未从 smali 读出，
-     * 先用宽松结构接住，保证不因字段推断错误而解析失败。
-     *
      * @param grade 年级 ID。原版从 `UserVO.grade` 读，这里由调用方传。
+     *
+     * ## 实测状态（2026-09-25）
+     *
+     * 本接口（`/leo-game-pk/android/game/homepage`）实测返回
+     * **401 `unauthorized`**（响应头 `x-block-by: SolarAuthFilter`）——
+     * 与练习链路的 `417 solar-encoder` **根因不同**：
+     *  - 401 = **认证**没过（两层 cookie 缺一层，或设备链未导入）；
+     *  - 417 = 认证过了，卡在 `sign` 参数。
+     *
+     * 所以 PK 侧缺的不是 sign，是**登录态本身**。用 [probeAuth] 可提前判明。
      */
     suspend fun fetchPkEntry(grade: Int): JsonElement? = runCatching {
         ServiceLocator.poemsParadise.getPoemsPkEntryData(grade)
     }.getOrNull()
+
+    /**
+     * 主域登录态自检探针。
+     *
+     * 打 `/leo-star/android/exercise/rank/pre-fetch` —— 这是主域上**唯一实测恒 200**
+     * 的端点（2026-09-25 逐端点实测确证），且它是纯 GET、无副作用，
+     * 适合当「两层 cookie 是否齐全」的探针。
+     *
+     * 主域认证是两层，缺一即 401：
+     *
+     * | 层 | cookie | 本项目能否自取 |
+     * |---|---|---|
+     * | 设备认证 | `sid` + `ks_sess` + `ks_deviceid` | **否**，只能用户从原版导入 |
+     * | 用户认证 | `sess` / `userid` / `g_sess` / `persistent` | 是，登录即可 |
+     *
+     * @return true = 两层齐全（主域业务可打）；false = 缺设备链或未登录
+     */
+    suspend fun probeAuth(): Boolean = runCatching {
+        ServiceLocator.exerciseLegacy.getCurrentUserExp() != null
+    }.getOrDefault(false)
 }

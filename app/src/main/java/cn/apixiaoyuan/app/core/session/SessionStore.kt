@@ -33,6 +33,7 @@ object SessionStore {
     private const val KEY_COOKIES = "cookieJsonListKey"
     private const val KEY_YFD_U = "yfd_u"
     private const val KEY_SUB_USER_IDS = "sub_user_ids"
+    private const val KEY_GRADE = "grade"
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -209,7 +210,24 @@ object SessionStore {
         }
 
     /**
-     * 是否已登录：`userid` cookie 存在即视为已登录。
+     * 当前登录用户的年级 ID。
+     *
+     * PK 入口数据（`/leo-game-pk/android/game/homepage`）按年级取，
+     * 用错年级会拉到别的年级的入口。真机来源是 `UserVO.grade`。
+     *
+     * 会话里没存过（未登录 / 老会话）时返回 null，调用方自行回退。
+     */
+    fun grade(): Int? {
+        val v = prefs().getInt(KEY_GRADE, -1)
+        return if (v == -1) null else v
+    }
+
+    /** 保存年级 ID（登录 / 拉到 UserVO 后调用）。 */
+    fun saveGrade(grade: Int) {
+        prefs().edit().putInt(KEY_GRADE, grade).apply()
+    }
+
+    /** 是否已登录：`userid` cookie 存在即视为已登录。
      *
      * ## 判定口径为什么不是 `sid`
      *

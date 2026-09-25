@@ -33,19 +33,24 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 悬浮底栏占位高度。
+ * 悬浮底栏的**滚动限位**高度。
  *
  * 由 `MainActivity.AppShell` 提供：底栏**显示时**为「底栏高 + 12dp 呼吸 + 手势条」，
- * 二级页（底栏淡出）时为 `0.dp`。`AppScaffold` 读它并加到内容区底部留白上。
+ * 二级页（底栏淡出）时为 `0.dp`。
  *
- * ## 为什么需要它
+ * ## 语义纪律（2026-09-25 修正 —— 此前实现是错的）
  *
- * 底栏是**浮层**（不占布局空间），所以内容能滑到底部被它遮住 —— 这是玻璃透明感
- * 成立的前提，也是刻意设计。但**只在底栏真的存在时**成立：二级页没有底栏，
- * 再留 96dp 就是纯浪费，滚动到底会停在一大片空白上。
+ * 这个值**只用于滚动容器的底部限位**（`LazyColumn.contentPadding.bottom` /
+ * Column 底部 spacer），**绝不进内容区的 `PaddingValues(bottom =)`**：
+ *
+ *  - 底栏是**浮层**（不占布局空间），内容本就该能滑到它**下面** ——
+ *    内容从玻璃下方穿过并产生折射，这正是液态玻璃观感成立的前提；
+ *  - 若把它加进内容区 padding，等于把整个页面顶上去，底栏下方永远空着，
+ *    玻璃没有东西可折射，设计意图完全落空；
+ *  - 但滚动**终点**必须抬高它，否则最后一项会停在底栏后面看不见。
  *
  * 用 CompositionLocal 而不是给每个页面加参数：页面不该知道「当前是不是 Tab 根页」，
- * 那是导航层的事实。这样所有页面（现有的与以后新增的）都自动拿到正确留白。
+ * 那是导航层的事实。这样所有页面（现有的与以后新增的）都自动拿到正确限位。
  */
 val LocalBottomBarInset = staticCompositionLocalOf { androidx.compose.ui.unit.Dp.Unspecified }
 
@@ -104,27 +109,48 @@ fun AppScaffold(
         },
     ) { innerPadding ->
         // innerPadding 已含顶栏高度（顶栏自带 statusBars）与 navigationBars（底部手势条）。
-        // 底栏是浮层，不占布局空间；但**底栏存在时**必须给它留出高度，
-        // 否则内容滚到底会停在底栏后面（二级页则相反，需要滚到屏幕最底）。
-        // 这个值由 AppShell 通过 LocalBottomBarInset 给出，这里直接消费。
+        //
+        // **这里不再加底栏高度**（2026-09-25 修正）：底栏是浮层，内容必须能滑到它
+        // 下面才能被折射。此前把 LocalBottomBarInset 加在这里，等于把整个页面
+        // 顶上去，玻璃下面空无一物 —— 液态玻璃的设计意图完全落空。
+        //
+        // 底栏高度改由滚动容器消费：见下方 [LocalScrollBottomLimit] 的提供，
+        // LazyColumn / Column 的滚动终点才抬高它（最后一项滚到不被遮挡处）。
         val barInset = LocalBottomBarInset.current
         val barExtra = if (barInset.isSpecified) barInset else 0.dp
-        val bottom = innerPadding.calculateBottomPadding() + bottomInset + barExtra
-        Box(
-            Modifier
-                .fillMaxSize()
-                // 内容层被记录进 backdrop，供顶栏采样做渐变模糊。
-                .layerBackdrop(backdrop),
-        ) {
-            content(
-                PaddingValues(
-                    top = innerPadding.calculateTopPadding(),
-                    bottom = bottom,
+        val bottom = innerPadding.calculateBottomPadding() + bottomInset
+        CompositionLocalProvider(LocalScrollBottomLimit provides barExtra) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    // 内容层被记录进 backdrop，供顶栏采样做渐变模糊。
+                    .layerBackdrop(backdrop),
+            ) {
+                content(
+                    PaddingValues(
+                        top = innerPadding.calculateTopPadding(),
+                        bottom = bottom,
+                    )
                 )
-            )
+            }
         }
     }
 }
+
+/**
+ * 滚动容器应追加的**底部限位**。
+ *
+ * 由 `AppScaffold` 从 [LocalBottomBarInset] 换算后提供，供 `LazyColumn` 的
+ * `contentPadding.bottom` 或 `Column` 的底部 spacer 消费。
+ *
+ * 与 [LocalBottomBarInset] 的区别（两者数值相同，语义不同）：
+ *  - [LocalBottomBarInset] 是「导航层事实」—— 当前是否在 Tab 根页、底栏多高；
+ *  - 本值是「页面滚动终点该抬多少」—— 由 scaffold 换算后下发给滚动容器。
+ *
+ * 分成两个是为了让滚动容器不必自己判断 `isSpecified`，也避免页面直接依赖
+ * 导航层的 Local。
+ */
+val LocalScrollBottomLimit = staticCompositionLocalOf { 0.dp }
 
 /**
  * miuix 渐变模糊顶栏。
@@ -199,9 +225,16 @@ fun AppListScaffold(
     content: LazyListScope.() -> Unit,
 ) {
     AppScaffold(title = title, onBack = onBack, modifier = modifier, bottomInset = bottomInset) { pad ->
+        // 滚动终点抬高底栏高度：内容仍可滑到底栏**下方**（玻璃折射成立），
+        // 但最后一项能滚到「不被底栏遮挡」的位置 —— 消费的是
+        // LocalScrollBottomLimit，不是内容区 padding。
+        val scrollLimit = LocalScrollBottomLimit.current
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = pad,
+            contentPadding = PaddingValues(
+                top = pad.calculateTopPadding(),
+                bottom = pad.calculateBottomPadding() + scrollLimit,
+            ),
             content = content,
         )
     }

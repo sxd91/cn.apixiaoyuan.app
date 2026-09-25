@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.apixiaoyuan.app.core.pk.PkRepository
+import cn.apixiaoyuan.app.core.session.SessionStore
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 
@@ -50,11 +51,29 @@ class PkViewModel : ViewModel() {
     /** H5 加载失败时的错误（主文档级）。 */
     var webError by mutableStateOf<String?>(null)
 
-    /** 拉 PK 入口数据。失败静默 —— H5 仍可加载。 */
-    fun loadEntry(grade: Int = DEFAULT_GRADE) {
+    /**
+     * 主域登录态自检结果。null = 还没探过。
+     *
+     * false 时 UI 应提示「请先导入登录态」而不是让用户对着白屏 ——
+     * PK 的 401 是**认证**问题（`SolarAuthFilter`），设备链只能用户从原版导入，
+     * 不提示的话用户无从得知该做什么。
+     */
+    var authOk by mutableStateOf<Boolean?>(null)
+        private set
+
+    /**
+     * 加载 PK：先自检主域登录态，再拉入口数据。
+     *
+     * 顺序有意为之：自检失败时 H5 大概率也是未登录态，
+     * 先跑探针能给出**明确的原因**（缺设备链 / 未登录），
+     * 而不是让用户看一个加载失败的 H5 猜。
+     */
+    fun loadEntry() {
         if (loading) return
         loading = true
         viewModelScope.launch {
+            authOk = PkRepository.probeAuth()
+            val grade = SessionStore.grade() ?: DEFAULT_GRADE
             val data = PkRepository.fetchPkEntry(grade)
             entryData = data
             entryRaw = data?.toString()?.take(20_000)

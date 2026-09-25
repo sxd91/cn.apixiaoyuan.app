@@ -116,13 +116,18 @@ object RouteAccount
 fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
+    startDestination: Any = RouteHome,
 ) {
     // 过渡动画随设置实时切换：PageTransitionPrefs.animation 是 Compose 可观察状态，
     // 设置页改一下这里就重组，NavHost 用新的转场 —— 不需要重启 Activity。
+    //
+    // 注意：这四条转场**只作用于二级页**。四个 Tab 根页之间的切换改由
+    // MainActivity 的 HorizontalPager 负责（整屏水平平移，老挂戏老叟同款），
+    // 不走这里 —— Tab 是同层替换，用 push 的滑动转场会让人误以为进了下一级。
     val transitions = pageTransitionsFor(PageTransitionPrefs.animation)
     NavHost(
         navController = navController,
-        startDestination = RouteHome,
+        startDestination = startDestination,
         modifier = modifier.fillMaxSize(),
         enterTransition = transitions.enter,
         exitTransition = transitions.exit,
