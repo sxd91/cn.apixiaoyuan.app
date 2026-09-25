@@ -124,9 +124,23 @@ object ExerciseRepository {
     suspend fun fetchExam(
         keypointId: Int,
         limit: Int,
+    ): ExamData? = fetchExamRaw(keypointId.toString(), limit)
+
+    /**
+     * 出题（字符串形态知识点 ID）。
+     *
+     * 与 [fetchExam] 同一条接口，只是不做 `Int` 转换 —— 刷分链路的知识点 ID
+     * 来自配置项（字符串，可为空串表示自动扫描），且扫描时是 1..2^15 的整数
+     * 序列，直接以字符串传更贴合接口签名（原版 `@Field("keypointId") String`）。
+     *
+     * 失败返回 null。
+     */
+    suspend fun fetchExamRaw(
+        keypointId: String,
+        limit: Int,
     ): ExamData? = runCatching {
         ServiceLocator.oral.getExamInfo(
-            keypointId = keypointId.toString(),
+            keypointId = keypointId,
             limit = limit.toString(),
         )
     }.getOrNull()

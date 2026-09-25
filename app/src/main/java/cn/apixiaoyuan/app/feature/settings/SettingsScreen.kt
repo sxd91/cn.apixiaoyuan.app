@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,7 +19,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.theme.PageTransitionAnimation
+import cn.apixiaoyuan.app.core.design.theme.PageTransitionPrefs
 import cn.apixiaoyuan.app.core.navigation.RouteOldSimian
+import cn.apixiaoyuan.app.core.navigation.RouteScorePump
 
 /**
  * 设置页 —— 移植「老挂戏老叟」（cn.nizou.sxd）SettingsScreen 的主题 + 配置两段。
@@ -46,11 +50,41 @@ fun SettingsScreen(navController: NavHostController) {
                 SettingRow(title = "种子颜色", description = "自定义主色调的种子色值")
                 SettingRow(title = "底栏效果", description = "液态玻璃 / 毛玻璃 / 纯色")
             }
+            SettingGroup(title = "界面") {
+                // 页面过渡动画：两个选项（Miuix / AOSP），默认 Miuix。
+                // 每行一个选项，选中行右侧显示「✓」—— 与「主题模式」那类
+                // 「点一下循环切换」不同，这里把两个选项都摆出来，用户能直接
+                // 看到有哪几种、当前是哪种。
+                Text(
+                    text = "页面过渡动画",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 16.dp, top = 14.dp),
+                )
+                PageTransitionAnimation.entries.forEach { option ->
+                    SettingRow(
+                        title = option.displayName,
+                        description = when (option) {
+                            PageTransitionAnimation.MIUIX ->
+                                "进场页整屏滑入，被覆盖页让位 1/4 宽度（默认）"
+                            PageTransitionAnimation.AOSP ->
+                                "进出只做轻微位移 + 淡入淡出，被覆盖页不动"
+                        },
+                        selected = PageTransitionPrefs.animation == option,
+                        onClick = { PageTransitionPrefs.update(option) },
+                    )
+                }
+            }
             SettingGroup(title = "配置") {
                 SettingRow(
                     title = "老挂戏老叟",
-                    description = "练习代答 / 提交画笔 / 结算时间 / PK 自动化",
+                    description = "练习代答 / 提交画笔 / 结算时间 / 刷分 / PK 自动化",
                     onClick = { navController.navigate(RouteOldSimian) },
+                )
+                SettingRow(
+                    title = "自定义分数（刷分）",
+                    description = "刷到目标分数（练习成绩上传主接口）",
+                    onClick = { navController.navigate(RouteScorePump) },
                 )
                 SettingRow(title = "导出配置", description = "将全部设置保存为 JSON 文件")
                 SettingRow(title = "导入配置", description = "从 JSON 文件恢复设置")
@@ -83,30 +117,45 @@ private fun SettingGroup(title: String, content: @Composable () -> Unit) {
     }
 }
 
-/** 设置项行：标题 + 副标题，点击回调可空（占位行先不给跳转）。 */
+/**
+ * 设置项行：标题 + 副标题，点击回调可空（占位行先不给跳转）。
+ *
+ * @param selected 单选行的选中态；null 表示这不是单选行（不显示勾）。
+ */
 @Composable
 private fun SettingRow(
     title: String,
     description: String?,
+    selected: Boolean? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (description != null) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (description != null) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        if (selected == true) {
+            Text(
+                text = "✓",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }

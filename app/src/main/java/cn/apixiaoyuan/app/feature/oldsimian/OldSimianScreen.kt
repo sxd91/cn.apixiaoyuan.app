@@ -1,5 +1,6 @@
 package cn.apixiaoyuan.app.feature.oldsimian
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.navigation.RouteScorePump
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -59,15 +61,23 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 4. 自定义结算时间 —— 每题 `costTime` 固定为配置值（服务端下限 300ms）
  * 5. 结束页自动化 —— PK 结算页自动开下一局（注入 JS）
  * 6. 去除排行榜展示动效 —— CSS 动画归零 + 静音（注入 JS）
+ * 7. 自定义分数（刷分）—— 走 `PUT /leo-math/android/exams/v2/{examId}`
+ *    （`uploadExamResult`，练习成绩上传主接口），循环「取卷 → 全对填充 → 上传」
+ *    直到 `curWeekScore ≥ 目标`。算法在 [cn.apixiaoyuan.app.core.oldsimian.ScorePump]，
+ *    状态机在 `ScorePumpViewModel`，参数页是本文件顶部的「打开刷分页」入口。
+ *
+ *    **此前的描述是错的**（已订正）：旧注释写「走
+ *    `POST /leo-star/android/exercise/rank/login/attend`」—— 那是参考项目
+ *    `postSavedExp` 的实际落点，**服务端限次（真机实测每天约 3 次）**，
+ *    根本不是刷分该走的接口。
  *
  * ## 未接入（明确标注，不摆空壳骗自己）
  *
- *  - **自定义分数（刷分）**：走 `POST /leo-star/android/exercise/rank/login/attend`，
- *    该接口 body 带 `@NeedEncode`，本项目 native 编码器（`EncodeBridge`）仍是恒等实现，
- *    且请求体模型 `LeoTodayExerciseListData` 字段是从 smali 推断的 —— 需 native 编码
- *    接入 + 真机确证字段后才可安全调用，否则只会拿 4xx。
  *  - **无视名字限制**：本项目暂无昵称编辑入口；且昵称校验最终由服务端执行，
  *    客户端放开本地校验没有实际意义。等接入「个人资料编辑」时再接。
+ *    （`LeoProfileApiService.updateUserInfo` 已存在可直接复用，但
+ *    `UserVO.userId` / `primaryUserId` 是非空 `Int`，直接构造会输出
+ *    `"userId":0` 污染请求，必须新建专用 body 类。）
  */
 @Composable
 fun OldSimianScreen(navController: NavHostController) {
@@ -174,15 +184,28 @@ fun OldSimianScreen(navController: NavHostController) {
                 )
             }
 
-            // ==================== 待接入 ====================
-            SectionCard(title = "待接入") {
+            // ==================== 分数 ====================
+            SectionCard(title = "分数") {
                 SwitchRow(
                     title = "自定义分数（刷分）",
-                    summary = "待 native 请求编码器接入后启用：上报接口 body 需编码",
+                    summary = "循环「全对上传练习成绩」刷到目标分数，无日限；开启后进二级页设置参数",
                     checked = OldSimianPrefs.customScoreEnabled,
-                    enabled = false,
-                    onCheckedChange = {},
+                    onCheckedChange = {
+                        OldSimianPrefs.customScoreEnabled = it
+                        OldSimianPrefs.persist()
+                    },
                 )
+                if (OldSimianPrefs.customScoreEnabled) {
+                    EntryRow(
+                        title = "打开刷分页",
+                        summary = "设置目标分数 / 知识点 / 每局题数与间隔",
+                        onClick = { navController.navigate(RouteScorePump) },
+                    )
+                }
+            }
+
+            // ==================== 待接入 ====================
+            SectionCard(title = "待接入") {
                 SwitchRow(
                     title = "无视名字限制",
                     summary = "待接入「个人资料编辑」后启用：本项目当前无昵称编辑链路",
@@ -254,7 +277,6 @@ private fun SectionCard(
         }
     }
 }
-
 /** 开关行：左标题+副标题，右 Switch。 */
 @Composable
 private fun SwitchRow(
@@ -277,6 +299,32 @@ private fun SwitchRow(
             enabled = enabled,
             onCheckedChange = onCheckedChange,
         )
+    }
+}
+
+/**
+ * 入口行：左标题+副标题，整行可点，右侧一个指示箭头。
+ *
+ * 与 [SwitchRow] 的区别是「点整行跳转」而不是「点开关」—— 二级页入口
+ * 不该伪装成开关，所以不用 [Switch]，改用一个 `›` 提示可点。
+ */
+@Composable
+private fun EntryRow(
+    title: String,
+    summary: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text = title, color = MiuixTheme.colorScheme.onSurfaceContainer)
+            Text(text = summary, color = MiuixTheme.colorScheme.onSurfaceContainerVariant)
+        }
+        Text(text = "›", color = MiuixTheme.colorScheme.primary)
     }
 }
 

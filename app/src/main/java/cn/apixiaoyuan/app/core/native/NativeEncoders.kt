@@ -22,18 +22,29 @@ package cn.apixiaoyuan.app.core.native
  */
 
 /**
- * 请求体编码（`libRequestEncoder.so`）。
+ * 请求头签名（`libRequestEncoder.so`）。
  *
  * 对应原版 `com.fenbi.android.leo.utils.e`。两个 native 方法：
- *  - [sdwioxccsd]：无参返 String，推测是取密钥 / 盐（命名无信息量，
- *    但签名明确）。**首次调用前必须确保 `loadLibrary` 成功。**
- *  - [zcvsd1wr2t]：三参 `(String, String, Int)` 返 String，推测是主体编码
- *    函数 —— 输入待编码内容、密钥 / 盐、模式编号。
+ *  - [sdwioxccsd]：无参返 String。**调用方已确证**为
+ *    `com/fenbi/android/leo/logic/v0$b.smali` —— 生成设备指纹 id，写入 JSON 的
+ *    `id` 字段。
+ *  - [zcvsd1wr2t]：三参 `(String, String, Int)` 返 String。**调用方已确证**为
+ *    `ds/c5.smali`（OkHttp 拦截器），调用形态为
+ *    `zcvsd1wr2t(输入, "wdi4n2t8edr", tg/x.k().s()/1000)` —— 第二参是硬编码盐，
+ *    第三参是秒级时间戳。
  *
- * 已确证需编码的接口：`postSavedExp`（`@NeedEncode`）。
+ * 由此可判定：**本库属 OkHttp 请求头签名链路，与请求体编码无关。**
+ * 请求体编码走的是 `libContentEncoder.so`（见 [ContentEncoderJNI] 与
+ * `core/native/NativeEncodeInstaller.kt`）。
  *
- * ⚠️ 两个方法的具体语义（哪个参数是什么、返回值怎么用）**未确证** ——
- * 需要读原版调用方的 smali 才能确定。不猜参数含义，只保留签名。
+ * so 符号表事实：`libRequestEncoder.so` 仅有 `JNI_OnLoad` 一个非 C++ 静态导出，
+ * 无任何 `Java_*` 导出，方法名字符串在 so 中完全不存在（`grep -c` 全为 0），
+ * 唯一类名字符串是 `com/yuanfudao/android/leo/stub/SecureStub` —— 说明方法名加密
+ * 且运行时走 `RegisterNatives`。因此 [sdwioxccsd] / [zcvsd1wr2t] 两个名字
+ * 是 JNI 注册时的名字，必须逐字保留。
+ *
+ * 当前未接线：本项目请求头签名由 `HeaderInterceptor` 自建实现承载，未使用本库。
+ * 保留声明仅为完整性，不参与任何链路。
  */
 object RequestEncoderJNI {
 

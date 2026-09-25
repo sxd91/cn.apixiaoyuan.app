@@ -310,7 +310,7 @@ private fun Chip(
     }
 }
 
-/** 经验/任务进度卡。 */
+/** 本周分数卡。数据源为 `getCurrentUserExp` 的 `curWeekScore`。 */
 @Composable
 private fun ExpCard(exp: LeoUserCurrentExpData) {
     Card(
@@ -325,17 +325,25 @@ private fun ExpCard(exp: LeoUserCurrentExpData) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "今日经验",
+                text = "本周分数",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "${exp.currentExp} / ${exp.nextLevelExp}",
+                text = exp.curWeekScore.toString(),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
             )
+            val multiple = exp.expectedMultiple.multiple
+            if (multiple > 1) {
+                Text(
+                    text = "当前 ${multiple} 倍经验",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

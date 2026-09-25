@@ -12,7 +12,9 @@ import cn.apixiaoyuan.app.core.network.RetrofitFactory
 import cn.apixiaoyuan.app.core.network.NetworkConfig
 import cn.apixiaoyuan.app.core.auth.DeviceFingerprint
 import cn.apixiaoyuan.app.core.database.AppDatabase
+import cn.apixiaoyuan.app.core.design.theme.PageTransitionPrefs
 import cn.apixiaoyuan.app.core.native.NativeDecodeInstaller
+import cn.apixiaoyuan.app.core.native.NativeEncodeInstaller
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import cn.apixiaoyuan.app.core.session.SessionStore
 
@@ -69,6 +71,11 @@ class App : Application() {
         // 而拦截器读取的是 DecodeBridge 这个全局单例；先装解码器再发第一个请求即可。
         // native 库加载失败时静默退回恒等实现，不阻断启动。
         NativeDecodeInstaller.install()
+        // 编码桥：把 libContentEncoder.so 的真实编码器装进网络层 EncodeBridge。
+        // 与解码桥同构 —— NeedEncodeInterceptor 读的也是全局单例，必须在
+        // 任何标注 @NeedEncode 的请求（练习成绩上传）发出之前就绪。
+        // 编码顺序为 gzip 压缩后再走 native c()，与解码侧完全互逆。
+        NativeEncodeInstaller.install()
 
         // 数据库：模块 12-13。八表实体 + SampleDao + AppDatabase。
         // 只建库不迁数据，初始化无副作用；放最后，不干扰网络与会话链路。
@@ -78,5 +85,9 @@ class App : Application() {
         // 与网络/会话链路无耦合，放最后初始化即可。
         // 必须在首次进入设置页或练习页之前就绪，否则 OldSimianPrefs.prefs() 会抛错。
         OldSimianPrefs.init(this)
+
+        // 界面级设置（二级页过渡动画）：同样是纯本地配置。
+        // 必须在 AppNavHost 首次组合之前就绪，否则 PageTransitionPrefs.prefs() 会抛错。
+        PageTransitionPrefs.init(this)
     }
 }

@@ -44,6 +44,9 @@ object OldSimianPrefs {
     private const val KEY_IGNORE_NICKNAME = "ignore_nickname_restriction"
     private const val KEY_CUSTOM_SCORE_ENABLED = "custom_score_enabled"
     private const val KEY_CUSTOM_SCORE_VALUE = "custom_score_value"
+    private const val KEY_CUSTOM_SCORE_KEYPOINT = "custom_score_keypoint"
+    private const val KEY_CUSTOM_SCORE_LIMIT = "custom_score_limit"
+    private const val KEY_CUSTOM_SCORE_INTERVAL_MS = "custom_score_interval"
     private const val KEY_AUTO_NEXT_ROUND = "auto_next_round"
     private const val KEY_NEXT_ROUND_INTERVAL_MS = "next_round_interval_ms"
     private const val KEY_NO_RANKING_ANIM = "no_ranking_anim"
@@ -61,6 +64,27 @@ object OldSimianPrefs {
 
     /** 「自定义答案」文本长度上限 —— 只用于手写数字/符号，超过就是误输入。 */
     const val CUSTOM_ANSWER_MAX_LEN = 16
+
+    /** 刷分每局题目数范围。上限对齐 cn.nizou.sxd 的 `coerceIn(1, 200)`。 */
+    const val SCORE_LIMIT_MIN = 1
+    const val SCORE_LIMIT_MAX = 200
+    const val SCORE_LIMIT_DEFAULT = 10
+
+    /** 刷分每局间隔范围（毫秒）。0 = 不等待。 */
+    const val SCORE_INTERVAL_MIN = 0
+    const val SCORE_INTERVAL_MAX = 60_000
+    const val SCORE_INTERVAL_DEFAULT = 2000
+
+    /**
+     * 刷分知识点自动扫描上限。
+     *
+     * 取值 [1 shl 15]（32768），与 cn.nizou.sxd `ScorePump.MAX_KEYPOINT_ID` 同值 ——
+     * 该值是参考项目真机验证过的「1..2^15 覆盖全部有效知识点」的结论。
+     */
+    const val SCORE_KEYPOINT_MAX = 1 shl 15
+
+    /** 刷分最多刷多少局（防死循环），同 cn.nizou.sxd `ScorePump.MAX_ROUNDS`。 */
+    const val SCORE_MAX_ROUNDS = 1000
 
     @Volatile
     private var appContext: Context? = null
@@ -132,18 +156,50 @@ object OldSimianPrefs {
     // ---- 分数 ----
 
     /**
-     * 自定义分数（对应老挂戏老叟的「自定义分数的第一个模式」= 刷分模式）。
+     * 自定义分数（刷分）总开关。
      *
-     * ⚠️ **当前仅落配置，未接线**（原因见 [customScoreValue]）：
-     * 刷分走 `POST /leo-star/android/exercise/rank/login/attend`，
-     * 该接口 body 带 `@NeedEncode`（本项目 `EncodeBridge` 仍挂恒等实现），
-     * 且请求体模型 `LeoTodayExerciseListData` 字段是从 smali 推断的。
-     * 在 native 编码器接入 + 真机确证字段之前，贸然调用只会拿到 4xx。
+     * **已接线**（2026-09-25）：链路走 `PUT /leo-math/android/exams/v2/{examId}`
+     * （`uploadExamResult`，练习成绩上传主接口），而不是旧方案猜的
+     * `POST /leo-star/android/exercise/rank/login/attend`。
+     *
+     * 取证依据（逐行确证）：
+     *  - 参考项目 cn.nizou.sxd `api/ScorePump.kt` 的注释与实现：`postSavedExp`
+     *    实走 attend 接口，**服务端限次（真机实测每天约 3 次）**；
+     *    `uploadExamResult` 才是「自动上分」走的接口，**无 attend 的日限语义**；
+     *  - 本项目 `LeoOralApiService.uploadExamResult` 已存在且带 `@NeedEncode`；
+     *  - `@NeedEncode` 的真实实现已确证为
+     *    `gzip 压缩 → libContentEncoder.so 的 c(byte[])`（原版 `ds/i4.c([B])`），
+     *    本项目已内置该 so，编码方向由
+     *    [cn.apixiaoyuan.app.core.native.NativeEncodeInstaller] 落地。
+     *
+     * 本开关只表示「刷分功能可用」；真正开始刷分由
+     * [cn.apixiaoyuan.app.feature.oldsimian.ScorePumpViewModel] 按用户点击触发。
+     * 默认关。
      */
     var customScoreEnabled by mutableStateOf(false)
 
-    /** 刷分模式的目标分数。0 表示未配置。 */
+    /**
+     * 刷分的目标分数（`curWeekScore`）。
+     *
+     * 语义是「刷到 ≥ 该值就停」，**不是**「把分数改成该值」—— 分数由服务端
+     * 按实际上传的练习记录累计，客户端只能多刷几局逼近。0 表示未配置。
+     */
     var customScoreValue by mutableStateOf(0)
+
+    /**
+     * 刷分用的知识点 ID（字符串形态，`getExamInfo` 的 `keypointId`）。
+     *
+     * 留空（空串）= 自动扫描：取题失败时从 1 遍历到 [SCORE_KEYPOINT_MAX]，
+     * 找到第一个能出题的知识点即写入本字段（对齐 cn.nizou.sxd 的
+     * `custom_score_keypoint` 行为）。
+     */
+    var customScoreKeypoint by mutableStateOf("")
+
+    /** 刷分每局题目数。范围 [SCORE_LIMIT_MIN]..[SCORE_LIMIT_MAX]。 */
+    var customScoreLimit by mutableStateOf(SCORE_LIMIT_DEFAULT)
+
+    /** 刷分每局间隔（毫秒），用于降低请求频率。范围 [SCORE_INTERVAL_MIN]..[SCORE_INTERVAL_MAX]。 */
+    var customScoreIntervalMs by mutableStateOf(SCORE_INTERVAL_DEFAULT)
 
     // ---- PK / H5 ----
 
@@ -182,6 +238,11 @@ object OldSimianPrefs {
         ignoreNicknameRestriction = p.getBoolean(KEY_IGNORE_NICKNAME, false)
         customScoreEnabled = p.getBoolean(KEY_CUSTOM_SCORE_ENABLED, false)
         customScoreValue = p.getInt(KEY_CUSTOM_SCORE_VALUE, 0).coerceAtLeast(0)
+        customScoreKeypoint = p.getString(KEY_CUSTOM_SCORE_KEYPOINT, "").orEmpty()
+        customScoreLimit = p.getInt(KEY_CUSTOM_SCORE_LIMIT, SCORE_LIMIT_DEFAULT)
+            .coerceIn(SCORE_LIMIT_MIN, SCORE_LIMIT_MAX)
+        customScoreIntervalMs = p.getInt(KEY_CUSTOM_SCORE_INTERVAL_MS, SCORE_INTERVAL_DEFAULT)
+            .coerceIn(SCORE_INTERVAL_MIN, SCORE_INTERVAL_MAX)
         autoNextRound = p.getBoolean(KEY_AUTO_NEXT_ROUND, false)
         nextRoundIntervalMs = p.getInt(KEY_NEXT_ROUND_INTERVAL_MS, 1500)
             .coerceIn(NEXT_ROUND_INTERVAL_MIN, NEXT_ROUND_INTERVAL_MAX)
@@ -200,6 +261,9 @@ object OldSimianPrefs {
             .putBoolean(KEY_IGNORE_NICKNAME, ignoreNicknameRestriction)
             .putBoolean(KEY_CUSTOM_SCORE_ENABLED, customScoreEnabled)
             .putInt(KEY_CUSTOM_SCORE_VALUE, customScoreValue)
+            .putString(KEY_CUSTOM_SCORE_KEYPOINT, customScoreKeypoint)
+            .putInt(KEY_CUSTOM_SCORE_LIMIT, customScoreLimit)
+            .putInt(KEY_CUSTOM_SCORE_INTERVAL_MS, customScoreIntervalMs)
             .putBoolean(KEY_AUTO_NEXT_ROUND, autoNextRound)
             .putInt(KEY_NEXT_ROUND_INTERVAL_MS, nextRoundIntervalMs)
             .putBoolean(KEY_NO_RANKING_ANIM, noRankingAnim)

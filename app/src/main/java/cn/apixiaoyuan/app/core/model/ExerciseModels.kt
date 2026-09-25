@@ -30,16 +30,49 @@ data class LeoTaskItem(
 /**
  * 当前用户经验值（`getCurrentUserExp` 返回）。
  *
- * ⚠️ 字段靠推断：真机 `leo_user_mmkv` 的 `cachedPetStatusDataKey` 里有
- * `currentExp` / `currentLevel` / `nextLevelExp` 三个字段，与此接口
- * 返回的数据同量纲，据此落盘。待真机抓完整响应确认。
+ * 字段来自原版 `com/fenbi/android/leo/data/LeoUserCurrentExpData`
+ * （`smali_classes2`，来自 `leo-exercise-common-legacy_release`）逐行读出，
+ * 构造签名为 `(LeoExpectedMultipleData;IJLjava/util/List;)V`：
+ *
+ *  - [expectedMultiple]：非空对象，只含一个 `multiple` 字段
+ *  - [curWeekScore]：本周分数 —— **刷分链路读的就是它**
+ *  - [rankVersion]：排行榜版本号
+ *  - [multiInfoList]：多倍任务列表，非空，默认空表
+ *
+ * 此前本类曾按真机 `leo_user_mmkv` 的 `cachedPetStatusDataKey`
+ * （`currentExp` / `currentLevel` / `nextLevelExp`）推断字段，**已证伪**：
+ * 那是本地缓存键，与本接口响应不同源。刷分需要读 [curWeekScore]，
+ * 字段名不匹配会直接拿到 0，因此这里按原版逐字对齐。
  */
 @Serializable
 data class LeoUserCurrentExpData(
-    @SerialName("currentExp") val currentExp: Int = 0,
-    @SerialName("currentLevel") val currentLevel: Int = 1,
-    @SerialName("nextLevelExp") val nextLevelExp: Int = 0,
-    @SerialName("maxLevelReached") val maxLevelReached: Boolean = false,
+    @SerialName("expectedMultiple") val expectedMultiple: LeoExpectedMultipleData = LeoExpectedMultipleData(),
+    @SerialName("curWeekScore") val curWeekScore: Int = 0,
+    @SerialName("rankVersion") val rankVersion: Long = 0L,
+    @SerialName("multiInfoList") val multiInfoList: List<MultipleTask> = emptyList(),
+)
+
+/**
+ * 期望倍率（原版 `LeoExpectedMultipleData`）。
+ *
+ * 该类只有一个 `private final multiple:I` 字段，构造签名 `(I)V`。
+ */
+@Serializable
+data class LeoExpectedMultipleData(
+    @SerialName("multiple") val multiple: Int = 0,
+)
+
+/**
+ * 多倍任务（原版 `MultipleTask`）。
+ *
+ * 三个字段：`private final expireTime:J` / `private final multiType:I` /
+ * `private final multiple:I`。
+ */
+@Serializable
+data class MultipleTask(
+    @SerialName("expireTime") val expireTime: Long = 0L,
+    @SerialName("multiType") val multiType: Int = 0,
+    @SerialName("multiple") val multiple: Int = 0,
 )
 
 /**

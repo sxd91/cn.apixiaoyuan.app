@@ -1,12 +1,17 @@
 package cn.apixiaoyuan.app.core.network
 
 /**
- * 标记该接口的请求体在发出前需要 native 层编码（`libRequestEncoder.so`）。
+ * 标记该接口的请求体在发出前需要 native 层编码（`libContentEncoder.so`）。
  *
  * 与 [NeedDecode] 方向相反：`@NeedDecode` 处理响应，本注解处理请求。
  *
  * 已确证需编码的接口：
+ *  - `uploadExamResult`（`PUT /leo-math/android/exams/v2/{examId}`，练习成绩上传）
  *  - `postSavedExp`（`POST /leo-star/android/exercise/rank/login/attend`）
+ *
+ * 编码链路（原版逐行读出）：请求体字节 → gzip 压缩 → `libContentEncoder.so`
+ * 的 `c()`。与响应解码链路互逆，共用同一个 so。真实实现见
+ * `core/native/NativeEncodeInstaller.kt`。
  *
  * 拦截逻辑见 [NeedEncodeInterceptor]。编码器出口为 [EncodeBridge]。
  */
