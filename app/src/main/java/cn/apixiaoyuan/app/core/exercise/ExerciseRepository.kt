@@ -46,7 +46,28 @@ object ExerciseRepository {
     /**
      * 拉当前用户经验值。失败返回 null。
      *
-     * 这个接口带 `@NotNullAndValid` —— 服务端若返回空体会走 converter 报错，
+     * ## 这条接口是主域上**唯一实测可用**的（2026-09-25）
+     *
+     * 主域 `xyks.yuanfudao.com` 上：
+     *  - 本接口 `GET /leo-star/android/exercise/rank/pre-fetch` → **HTTP 200 + 真实数据**
+     *  - 其余端点（`task/home` / `leo-math` 出题 / `leo-profile` 资料 / 英语 / 作业）
+     *    全部 **417**，响应头 `x-block-by: solar-encoder`
+     *
+     * 已排除的假设（都实测过）：cookie 差异（用原版真机完整 11 条 cookie
+     * 仍 417）、设备头（13 种）、query 参数（7 种）、body 形态
+     * （json/octet × plain/gzip 四种）、时间戳头（7 种）。
+     *
+     * `solar-encoder` 在客户端 APK 里**完全不存在**（smali / assets /
+     * 所有 so 均已 grep），是服务端中间件自己打的标。服务端只对精确路径
+     * `.../rank/pre-fetch` 放行明文 —— 该端点加任意 query 仍 200，
+     * 但 `/pre-fetch/extra` 就 417，说明是**路径白名单**而非参数校验。
+     *
+     * ## 对本项目的意义
+     *
+     * 刷分链路里**分数读取这一段是真实可用的**（`fetchCurrentScore` 走这里），
+     * 卡住的只是取卷与上传。UI 上已如实说明。
+     *
+     * 这个接口也带 `@NotNullAndValid` —— 服务端若返回空体会走 converter 报错，
      * 被 [runCatching] 兜住。
      */
     suspend fun fetchExp(): LeoUserCurrentExpData? = runCatching {
