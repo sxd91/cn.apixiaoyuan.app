@@ -35,6 +35,9 @@ class AccountViewModel : ViewModel() {
     var currentUser by mutableStateOf<UserVO?>(null)
         private set
 
+    /** 导入登录态用的文本（标准 Cookie 头形态）。 */
+    var cookieInput by mutableStateOf("")
+
     /** 宝贝学习账号列表。 */
     var subAccounts by mutableStateOf<List<SubAccountItem>>(emptyList())
         private set
@@ -214,6 +217,32 @@ class AccountViewModel : ViewModel() {
 
     fun clearMessage() {
         message = null
+    }
+
+    /**
+     * 导入登录态（标准 `Cookie` 头形态）。
+     *
+     * **这是本项目拿到主域权限的唯一途径** —— 主域认证需要
+     * `sid` + `ks_sess` + `ks_deviceid` 三者齐备，而它们只由原版 App 的
+     * 登录通道下发，本项目自己拿不到（详见
+     * [cn.apixiaoyuan.app.core.session.SessionStore.importCookieHeader] 的 KDoc）。
+     *
+     * 导入后立刻刷新，让用户马上看到效果。
+     */
+    fun importCookies() {
+        val text = cookieInput.trim()
+        if (text.isEmpty()) {
+            message = "请先粘贴 Cookie 字符串"
+            return
+        }
+        val n = SessionStore.importCookieHeader(text)
+        if (n == 0) {
+            message = "没能解析出任何 cookie（应为 name=value; name2=value2 形态）"
+            return
+        }
+        cookieInput = ""
+        message = "已导入 $n 条 cookie。若主域接口仍报 401，说明缺少 sid / ks_sess / ks_deviceid。"
+        refresh()
     }
 
     private fun startCountdown() {

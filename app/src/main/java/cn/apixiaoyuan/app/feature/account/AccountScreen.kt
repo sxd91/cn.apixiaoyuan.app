@@ -246,6 +246,30 @@ fun AccountScreen(
                 }
             }
 
+            // ==================== 登录态导入 ====================
+            SectionCard(title = "导入登录态（主域权限）") {
+                Text(
+                    text = "本项目自带的登录只拿到账号域权限。主域（练习 / 刷分 / 资料）" +
+                        "还需要 sid + ks_sess + ks_deviceid 三个 cookie，它们只由原版 App 下发，" +
+                        "本项目无法自行获取。把原版的 Cookie 字符串粘进来即可补上。",
+                    color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
+                )
+                TextField(
+                    value = viewModel.cookieInput,
+                    onValueChange = { viewModel.cookieInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = "sid=...; ks_sess=...; ks_deviceid=...",
+                    useLabelAsPlaceholder = true,
+                    maxLines = 4,
+                )
+                Button(
+                    onClick = { viewModel.importCookies() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("导入")
+                }
+            }
+
             viewModel.message?.let {
                 Card(
                     modifier = Modifier.fillMaxWidth(),

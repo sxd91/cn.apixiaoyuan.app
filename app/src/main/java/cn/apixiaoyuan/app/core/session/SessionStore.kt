@@ -104,6 +104,74 @@ object SessionStore {
         return raw.split(',').mapNotNull { it.trim().toIntOrNull() }
     }
 
+    /**
+     * 从标准 `Cookie` 请求头字符串导入 cookie（合并，同名覆盖）。
+     *
+     * ## 为什么需要这个入口
+     *
+     * 2026-09-25 实测确证：**主域（`xyks.yuanfudao.com`）的认证需要
+     * `sid` + `ks_sess` + `ks_deviceid` 三者同时存在** ——
+     *
+     * | 携带的 cookie | 结果 |
+     * |---|---|
+     * | 无 / 仅 `sid` / `sid`+`ks_sess` / `sid`+`ks_deviceid` | 401 `unauthorized` |
+     * | **`sid` + `ks_sess` + `ks_deviceid`** | 不再 401（授权通过） |
+     *
+     * 而这三者**只有原版的其它登录通道会下发**：本项目走的直连版
+     * `POST /accounts/android/safe/login`（账号域）实测只回
+     * `sess` / `userid` / `g_sess` / `__sub_user_infos__` / `g_loc` / `persistent`
+     * —— **从不含 `sid` 与 `ks_*` 系列**。它们也不在 APK 的 smali / assets /
+     * 任何 so 里（已全盘查过），是服务端在特定风控流程中下发的。
+     *
+     * 所以本项目**无法自己拿到**这三个 cookie。能给用户的诚实方案是：
+     * 从已登录的原版 App 里导出 cookie，粘进来导入。
+     *
+     * ## 导入格式
+     *
+     * 标准 `Cookie` 头形态（`name=value; name2=value2`），或浏览器
+     * DevTools / 抓包工具里直接复制的形态。**域名统一按域根 `yuanfudao.com`
+     * 写入**（实测原版就是 `"domain":"yuanfudao.com"`，不带前导点），
+     * 这样 cookie 对 `ape-api` 与 `xyks` 两个子域同时生效。
+     *
+     * @param header `name=value; name2=value2` 形态的串
+     * @return 实际导入的条目数
+     */
+    fun importCookieHeader(header: String): Int {
+        val parsed = header.split(';')
+            .mapNotNull { part ->
+                val kv = part.trim()
+                if (kv.isEmpty()) return@mapNotNull null
+                val eq = kv.indexOf('=')
+                if (eq <= 0) return@mapNotNull null
+                val name = kv.substring(0, eq).trim()
+                val value = kv.substring(eq + 1).trim()
+                if (name.isEmpty() || value.isEmpty()) return@mapNotNull null
+                name to value
+            }
+        if (parsed.isEmpty()) return 0
+
+        val merged = linkedMapOf<String, CookieEntry>()
+        loadCookies().forEach { merged[it.name] = it }
+        parsed.forEach { (name, value) ->
+            merged[name] = CookieEntry(
+                domain = "yuanfudao.com",
+                name = name,
+                value = value,
+                path = "/",
+                // 导入的 cookie 不设过期时刻：原版这些字段的 expiresAt 是远未来
+                // （253402300799999），但导入时无从得知，留 0 让 CookieJar
+                // 按 session cookie 处理 —— 至少不会因过期立刻失效。
+                expiresAt = 0L,
+                hostOnly = false,
+                httpOnly = true,
+                persistent = true,
+                secure = false,
+            )
+        }
+        saveCookies(merged.values.toList())
+        return parsed.size
+    }
+
     /** 读出全部 cookie；无会话时返回空表。 */
     fun loadCookies(): List<CookieEntry> {
         val raw = prefs().getString(KEY_COOKIES, null) ?: return emptyList()
