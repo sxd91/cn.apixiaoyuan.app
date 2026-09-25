@@ -71,6 +71,7 @@ object RetrofitFactory {
         val client = OkHttpClient.Builder()
             .cookieJar(PersistentCookieJar)
             .addInterceptor(BaseUrlInterceptor())
+            .addInterceptor(CommonQueryInterceptor(appVersionName))
             .addInterceptor(HeaderInterceptor(appVersionName, appVersionCode))
             .addInterceptor(AuthInterceptor(sessionProvider))
             .addInterceptor(NeedEncodeInterceptor())
