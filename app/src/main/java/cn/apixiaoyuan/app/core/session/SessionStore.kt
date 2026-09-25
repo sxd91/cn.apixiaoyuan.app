@@ -107,34 +107,50 @@ object SessionStore {
     /**
      * 从标准 `Cookie` 请求头字符串导入 cookie（合并，同名覆盖）。
      *
-     * ## 为什么需要这个入口
+     * ## 为什么需要这个入口（2026-09-25 实测确证）
      *
-     * 2026-09-25 实测确证：**主域（`xyks.yuanfudao.com`）的认证需要
-     * `sid` + `ks_sess` + `ks_deviceid` 三者同时存在** ——
+     * 主域（`xyks.yuanfudao.com`）的认证是**两层**，必须同时满足：
+     *
+     * | 层 | 需要的 cookie | 来源 |
+     * |---|---|---|
+     * | 设备认证 | `sid` + `ks_sess` + `ks_deviceid` | **只由原版 App 下发** |
+     * | 用户认证 | `sess` / `userid` / `g_sess` / `persistent` | 本项目登录即可拿到 |
+     *
+     * 逐组合实测（探针 `GET /leo-star/android/exercise/rank/pre-fetch`）：
      *
      * | 携带的 cookie | 结果 |
      * |---|---|
-     * | 无 / 仅 `sid` / `sid`+`ks_sess` / `sid`+`ks_deviceid` | 401 `unauthorized` |
-     * | **`sid` + `ks_sess` + `ks_deviceid`** | 不再 401（授权通过） |
+     * | 无 / 仅设备链 / 仅本项目登录 cookie | 401 `unauthorized` |
+     * | **设备链 + 本项目登录 cookie** | **200 + 完整业务数据** |
      *
-     * 而这三者**只有原版的其它登录通道会下发**：本项目走的直连版
-     * `POST /accounts/android/safe/login`（账号域）实测只回
-     * `sess` / `userid` / `g_sess` / `__sub_user_infos__` / `g_loc` / `persistent`
-     * —— **从不含 `sid` 与 `ks_*` 系列**。它们也不在 APK 的 smali / assets /
-     * 任何 so 里（已全盘查过），是服务端在特定风控流程中下发的。
+     * 200 响应体实证（含 `curWeekScore` / `expectedMultiple` / `rankVersion`）：
+     * `{"ver":"1.0","status":200,"data":{"curRank":0,"curWeekScore":0,
+     *   "expectedMultiple":{"multiple":1,"continuousCheckInCount":1},...}}`
      *
-     * 所以本项目**无法自己拿到**这三个 cookie。能给用户的诚实方案是：
-     * 从已登录的原版 App 里导出 cookie，粘进来导入。
+     * ## 为什么设备链拿不到
+     *
+     * - 直连版 `POST /accounts/android/safe/login`（账号域）实测只下发
+     *   `sess` / `userid` / `g_sess` / `__sub_user_infos__` / `g_loc` / `persistent`
+     *   —— **不含 `sid` 与任何 `ks_*`**。
+     * - 全 APK 排查：`ks_*` 不在任何 smali、assets，也不在
+     *   `libRedressProcess.so` / `libContentEncoder.so` 的字符串表里 ——
+     *   是**服务端在特定风控流程中下发**的，不是客户端算出来的。
+     * - 真机原版 MMKV `cookie_store / cookieJsonListKey` 里的 domain 是
+     *   `yuanfudao.com`（**不带前导点**），与常见 `Set-Cookie` 形态不同。
+     *
+     * 所以本项目**无法自行获得设备链**，只能由用户从原版 App 导入。
      *
      * ## 导入格式
      *
-     * 标准 `Cookie` 头形态（`name=value; name2=value2`），或浏览器
-     * DevTools / 抓包工具里直接复制的形态。**域名统一按域根 `yuanfudao.com`
-     * 写入**（实测原版就是 `"domain":"yuanfudao.com"`，不带前导点），
+     * 标准 `Cookie` 头形态（`name=value; name2=value2`）。
+     * **域名统一按 `yuanfudao.com` 写入**（实测原版形态），
      * 这样 cookie 对 `ape-api` 与 `xyks` 两个子域同时生效。
      *
+     * 导入只覆盖同名项，**不会清掉本项目登录已拿到的 cookie** ——
+     * 两层必须共存，缺一不可。
+     *
      * @param header `name=value; name2=value2` 形态的串
-     * @return 实际导入的条目数
+     * @return 实际解析出的条目数（0 表示格式不对）
      */
     fun importCookieHeader(header: String): Int {
         val parsed = header.split(';')
@@ -260,15 +276,25 @@ object PersistentCookieJar : CookieJar {
         cookies.forEach { c ->
             // 服务端删除指令：value 为空且已过期（典型形态 Set-Cookie: ks_sess=;Max-Age=0）。
             //
-            // 这种响应不是「下发一个空值 cookie」，是「让这个 cookie 失效」。原版
-            // 小猿口算的风控在 401 时会连发三行 ks_sess / ks_persistent / ks_deviceid
-            // 的清除指令（实测 HTTP 层可见）。若照单写入空值，本地就留下一条
-            // 「被服务端明确标记失效」的 cookie 记录，之后每次请求都带着空指纹走，
-            // 风控看到的就是一台被拒过的设备，陷入死循环。
+            // 这种响应不是「下发一个空值 cookie」，是「让这个 cookie 失效」。
             //
-            // 正确处理：把同名旧条目从表里移除，而不是写入空值。
+            // ## 保护范围（2026-09-25 修正）
+            //
+            // **只对「用户导入的设备链」放行，不删** —— `sid` / `ks_*` 系列
+            // 在本项目里只能靠用户从原版 App 导入，而服务端在风控拒绝时
+            // 会连发三行清除指令（实测 HTTP 层可见）。若照单删除，用户刚
+            // 导入的设备链会在第一次 401 后被服务端指令抹掉，功能当场失效
+            // 且用户完全不知道为什么。
+            //
+            // 其余 cookie（`sess` / `g_sess` / `persistent` 等，本项目自己
+            // 登录拿到的）**照常删除** —— 那是服务端登出的正常语义，
+            // 拦下来会导致「服务端已登出、本地仍带旧 token」。
+            //
+            // 取舍理由：设备链是**只读凭据**（本项目拿不到也刷不了），
+            // 留着最坏情况是请求被拒（可见错误）；删掉则是静默失效。
+            // 宁可让用户看到明确失败，也不要静默把配置吃掉。
             if (c.value.isEmpty() && (c.expiresAt <= 0L || !c.persistent)) {
-                merged.remove(c.name)
+                if (!isImportedDeviceCredential(c.name)) merged.remove(c.name)
             } else {
                 merged[c.name] = SessionStore.CookieEntry(
                     domain = c.domain,
@@ -286,6 +312,15 @@ object PersistentCookieJar : CookieJar {
         SessionStore.saveCookies(merged.values.toList())
     }
 
+    /**
+     * 是否是「只能由用户导入、不可由服务端清除」的设备凭据。
+     *
+     * 名单来自真机原版 MMKV `cookie_store` 的实测集合
+     * （`sid` / `ks_sess` / `ks_deviceid` / `ks_persistent` / `ks_r` / `ks_u`）。
+     */
+    private fun isImportedDeviceCredential(name: String): Boolean =
+        name == "sid" || name.startsWith("ks_")
+
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
         return SessionStore.loadCookies().mapNotNull { entry ->
             // 兜底：value 为空的条目不发出。历史版本可能已经把空值写进磁盘，
@@ -293,15 +328,26 @@ object PersistentCookieJar : CookieJar {
             if (entry.value.isEmpty()) return@mapNotNull null
             runCatching {
                 Cookie.Builder()
-                    .domain(entry.domain)
                     .path(entry.path)
                     .name(entry.name)
                     .value(entry.value)
                     .apply {
+                        // 域口径必须与 hostOnly 一致，否则 cookie 发不出去。
+                        //
+                        // **这里此前写反了**：无论 hostOnly 真假都调 `hostOnlyDomain(domain)`，
+                        // 而 OkHttp 的 `hostOnlyDomain()` 会把 cookie 标记为「精确主机匹配」
+                        // （只匹配 `yuanfudao.com`，不匹配 `xyks.yuanfudao.com`）。
+                        // 结果就是服务端下发的 `.yuanfudao.com` 域 cookie（前导点 =
+                        // 含子域）被错误锁死，主域请求根本带不上 —— 与主域 401 直接相关。
+                        //
+                        // 正确做法：
+                        //  - hostOnly = false（前导点 / 显式 domain）→ `domain()`，含子域；
+                        //  - hostOnly = true → `hostOnlyDomain()`，仅精确主机。
+                        if (entry.hostOnly) hostOnlyDomain(entry.domain)
+                        else domain(entry.domain)
                         if (entry.expiresAt > 0L) expiresAt(entry.expiresAt)
                         if (entry.httpOnly) httpOnly()
                         if (entry.secure) secure()
-                        if (!entry.hostOnly) hostOnlyDomain(entry.domain)
                     }
                     .build()
             }.getOrNull()

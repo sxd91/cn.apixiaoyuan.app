@@ -249,16 +249,16 @@ fun AccountScreen(
             // ==================== 登录态导入 ====================
             SectionCard(title = "导入登录态（主域权限）") {
                 Text(
-                    text = "本项目自带的登录只拿到账号域权限。主域（练习 / 刷分 / 资料）" +
-                        "还需要 sid + ks_sess + ks_deviceid 三个 cookie，它们只由原版 App 下发，" +
-                        "本项目无法自行获取。把原版的 Cookie 字符串粘进来即可补上。",
+                    text = "主域（练习 / 刷分 / 资料）需要两层凭据：设备链（sid + ks_sess + " +
+                        "ks_deviceid）由原版 App 下发，本项目拿不到；用户凭据本项目登录已有。" +
+                        "两层齐备后主域接口才能通过（实测已确认可返回业务数据）。",
                     color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
                 )
                 TextField(
                     value = viewModel.cookieInput,
                     onValueChange = { viewModel.cookieInput = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = "sid=...; ks_sess=...; ks_deviceid=...",
+                    label = "sid=...; ks_sess=...; ks_deviceid=...（可只粘这三个）",
                     useLabelAsPlaceholder = true,
                     maxLines = 4,
                 )
@@ -268,6 +268,11 @@ fun AccountScreen(
                 ) {
                     Text("导入")
                 }
+                Text(
+                    text = "导入只覆盖同名项，不会清掉本项目登录已拿到的 cookie —— " +
+                        "两层必须共存。设备链也不会被服务端的清除指令抹掉。",
+                    color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
+                )
             }
 
             viewModel.message?.let {
