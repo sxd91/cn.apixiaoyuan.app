@@ -5,9 +5,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -27,7 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -158,11 +164,38 @@ private fun AppShell() {
                     )
                 }
 
-                AnimatedVisibility(
-                    visible = showTabBar,
-                    enter = fadeIn(tween(durationMillis = 180)),
-                    exit = fadeOut(tween(durationMillis = 180)),
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                // ==================== 悬浮底栏 ====================
+                //
+                // 进入二级页时的行为（用户明确要求）：底栏**不是淡出消失**，
+                // 而是被二级页**盖住**，并跟随转场一起**向左平移 + 压暗** ——
+                // 视觉上它仍在，只是退到了下一层，返回时随页面一起回来。
+                //
+                // 三件事必须同时做到，缺一就变回「两层皮」：
+                //  1. **z 序下沉**：底栏原本浮在内容之上；二级页期间必须改到底下，
+                //     否则它会一直盖在二级页上面（那才是真正的 bug）。
+                //     用 zIndex 而不是移除/淡出 —— 移除就没有「被覆盖」的观感。
+                //  2. **同步位移 + 压暗**：与二级页转场同一时长（450ms）、同向
+                //     （被覆盖层向左 1/4），让底栏看起来是「被推走」的那层。
+                //  3. **不可点击**：被盖住后不该还能点（否则点到看不见的 Tab）。
+                //     用 `graphicsLayer` 之外再叠一个 consume 点击的拦截层不优雅，
+                //     这里靠 zIndex 下沉后二级页自然吃掉触摸即可 ——
+                //     二级页是不透明且 fillMaxSize 的，触摸不会穿透到底栏。
+                val coveredProgress by animateFloatAsState(
+                    targetValue = if (showTabBar) 0f else 1f,
+                    animationSpec = tween(durationMillis = COVER_ANIM_MS),
+                    label = "tab_bar_covered",
+                )
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        // (1) z 序：根页时浮在上层（1f），被覆盖时沉到下层（-1f）。
+                        .zIndex(if (showTabBar) 1f else -1f)
+                        // (2) 与转场同步的位移 + 压暗。
+                        .graphicsLayer {
+                            translationX = -size.width * COVER_SHIFT_RATIO * coveredProgress
+                            alpha = 1f - 0.1f * coveredProgress
+                        },
                 ) {
                     LiquidGlassTabBar(
                         items = tabs,
@@ -171,21 +204,53 @@ private fun AppShell() {
                             // 老挂戏老叟同款：animateScrollToPage 触发平移动画。
                             scope.launch { pagerState.animateScrollToPage(index) }
                         },
-                            backdrop = backdrop,
-                            // 底栏效果三态来自设置页（液态玻璃 / 毛玻璃 / 纯色）。
-                            // 默认液态玻璃；低端机可降级到毛玻璃或纯色省掉背景采样开销。
-                            mode = when (ThemePrefs.bottomBarMode) {
-                                ThemePrefs.BottomBarMode.LIQUID_GLASS -> TabBarMode.LiquidGlass
-                                ThemePrefs.BottomBarMode.FROSTED -> TabBarMode.Blur
-                                ThemePrefs.BottomBarMode.SOLID -> TabBarMode.None
-                            },
-                            modifier = Modifier.padding(bottom = barBottomPadding),
+                        backdrop = backdrop,
+                        // 底栏效果三态来自设置页（液态玻璃 / 毛玻璃 / 纯色）。
+                        // 默认液态玻璃；低端机可降级到毛玻璃或纯色省掉背景采样开销。
+                        mode = when (ThemePrefs.bottomBarMode) {
+                            ThemePrefs.BottomBarMode.LIQUID_GLASS -> TabBarMode.LiquidGlass
+                            ThemePrefs.BottomBarMode.FROSTED -> TabBarMode.Blur
+                            ThemePrefs.BottomBarMode.SOLID -> TabBarMode.None
+                        },
+                        modifier = Modifier.padding(bottom = barBottomPadding),
+                    )
+                    // 压暗层：只盖在底栏自身范围内（matchParentSize），
+                    // 随 coveredProgress 从 0 到 COVER_DIM_MAX。
+                    // 用半透明黑而不是改 alpha —— 改 alpha 会让玻璃的折射内容
+                    // 一起变淡（看着像消失），压暗才是「退到暗处」的观感。
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                color = Color.Black.copy(alpha = COVER_DIM_MAX * coveredProgress),
+                                shape = RoundedCornerShape(28.dp),
+                            ),
                     )
                 }
             }
         }
     }
 }
+
+/**
+ * 二级页覆盖动画的时长。
+ *
+ * 与 `PageTransitions.DURATION_MS` 同值（450ms）—— 底栏的平移/压暗必须和
+ * 二级页的滑入**同一节奏**，否则会看到「页面滑进来了、底栏还在自己动」的
+ * 两层皮观感。
+ */
+private const val COVER_ANIM_MS = 450
+
+/**
+ * 被覆盖时底栏的视差位移比例（占自身宽度）。
+ *
+ * 取 1/4 与 `PageTransitions.miuixExit`（被覆盖页向左 1/4 屏 + alpha 0.9）
+ * 同款 —— 底栏此时属于「被覆盖层」，应与被覆盖的页面同步位移。
+ */
+private const val COVER_SHIFT_RATIO = 0.25f
+
+/** 被覆盖时叠加的暗色最大不透明度（progress=1 时）。 */
+private const val COVER_DIM_MAX = 0.35f
 
 /**
  * 悬浮底栏的**滚动限位**高度（与 `LiquidGlassTabBar` 内部胶囊的 `.height(56.dp)` 一致）。
