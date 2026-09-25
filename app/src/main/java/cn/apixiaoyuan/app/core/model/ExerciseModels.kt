@@ -106,17 +106,41 @@ data class MultipleTask(
 )
 
 /**
- * 今日练习列表（`postSavedExp` 的请求体）。
+ * 上报今日练习列表（`postSavedExp` 的 body）。
  *
- * ⚠️ 该接口带 `@NeedEncode` —— 请求体在发出前需 native 编码。
- * 字段未确证，这里用宽松结构占位（`JsonElement` 保留任意 JSON），
- * 保证序列化不丢字段。native 编码器接入前，这个占位不影响编译。
+ * ## 结构逐行确证（2026-09-25，不再推断）
+ *
+ * 来自 `smali_classes6/.../legacy/LeoTodayExerciseListData.smali`：
+ * 唯一字段 `todayExercises`（此前写的 `exerciseList/totalExp/date`
+ * 是**猜的，已证伪**——真构造签名 `(List<LeoTodayExerciseData>)V`）。
+ *
+ * ## 增量语义（用户拍板的「增量模式」真身）
+ *
+ * 每个 [LeoTodayExerciseData] 就是**一条增量记录**：
+ *  - `finishTime` —— 完成时刻（epoch 毫秒），服务端按"今天"过滤（原版
+ *    `LeoExerciseCommonDataStore.k()` 用 `ds/b1.K(finishTime)` 判当天）；
+ *  - `obtainExp` —— **本次获得的经验值（增量）**，不是总分；
+ *  - `ruleType` —— 规则类型，原版由 `LeoExamFinishHonorHelper` 按练习类型给。
+ *
+ * 客户端把 N 条增量记录打包上报，服务端累计到周分数 —— 这正是
+ * 「给一个增量值，直接上报增量」的协议基础，无需整卷上传。
  */
 @Serializable
 data class LeoTodayExerciseListData(
-    @SerialName("exerciseList") val exerciseList: List<JsonElement> = emptyList(),
-    @SerialName("totalExp") val totalExp: Int = 0,
-    @SerialName("date") val date: String? = null,
+    @SerialName("todayExercises") val todayExercises: List<LeoTodayExerciseData> = emptyList(),
+)
+
+/**
+ * 单条今日练习增量记录（`postSavedExp` body 的列表元素）。
+ *
+ * 构造签名 `(JII)V`（smali `LeoTodayExerciseData.smali` 逐行确证）：
+ * `finishTime: Long` + `obtainExp: Int` + `ruleType: Int`。
+ */
+@Serializable
+data class LeoTodayExerciseData(
+    @SerialName("finishTime") val finishTime: Long,
+    @SerialName("obtainExp") val obtainExp: Int,
+    @SerialName("ruleType") val ruleType: Int,
 )
 
 /** 英语练习章节（`getEnglishExercisesSections` 返回）。字段靠推断。 */

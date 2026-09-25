@@ -5,6 +5,7 @@ import cn.apixiaoyuan.app.core.model.ExerciseEnglishSectionVO
 import cn.apixiaoyuan.app.core.model.ExerciseScopeData
 import cn.apixiaoyuan.app.core.model.ExerciseType
 import cn.apixiaoyuan.app.core.model.LeoCurrentTaskInfo
+import cn.apixiaoyuan.app.core.model.LeoTodayExerciseListData
 import cn.apixiaoyuan.app.core.model.LeoUserCurrentExpData
 import cn.apixiaoyuan.app.core.network.ServiceLocator
 
@@ -181,4 +182,18 @@ object ExerciseRepository {
         val examId = body.idString ?: return@runCatching null
         ServiceLocator.oral.uploadExamResult(examId = examId, body = body)
     }.getOrNull()
+
+    /**
+     * 增量上报经验值（`postSavedExp` · attend 端点）。
+     *
+     * body 结构已从 smali 逐行确证（`todayExercises: [增量记录]`），
+     * 每个 `obtainExp` 是**本次获得的经验（增量）**，服务端累计到周分数 ——
+     * 这是「自定义分数 = 增量模式」的协议基础（详见 [ScorePump] 的 KDoc）。
+     *
+     * 失败返回 false（含 417 solar-encoder —— sign 未破前必被拦）。
+     */
+    suspend fun postSavedExp(body: LeoTodayExerciseListData): Boolean = runCatching {
+        ServiceLocator.exerciseLegacy.postSavedExp(body)
+        true
+    }.getOrDefault(false)
 }

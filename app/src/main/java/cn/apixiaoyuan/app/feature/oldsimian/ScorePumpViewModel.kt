@@ -68,7 +68,7 @@ class ScorePumpViewModel : ViewModel() {
     var running by mutableStateOf(false)
         private set
 
-    /** 进度文案（扫描中 / 第 N 局）。空串 = 无进度可显示。 */
+    /** 进度文案。空串 = 无进度可显示。 */
     var progress by mutableStateOf("")
         private set
 
@@ -76,17 +76,8 @@ class ScorePumpViewModel : ViewModel() {
     var message by mutableStateOf<String?>(null)
         private set
 
-    /** 承载 [ScorePump.pumpToTarget] 的协程。null = 未在刷分。 */
+    /** 承载 [ScorePump.pumpDelta] 的协程。null = 未在刷分。 */
     private var job: Job? = null
-
-    /**
-     * 最近一次读到的分数。
-     *
-     * 单独存一份（而不是复用 [currentScore]）是为了在**取消路径**上也能给出
-     * 一个数字：协程被取消后不能再调 `suspend` 函数去刷新分数，只能报出
-     * 取消前最后观察到的值。
-     */
-    private var lastScore: Int? = null
 
     init {
         refreshScore()
@@ -110,91 +101,56 @@ class ScorePumpViewModel : ViewModel() {
                 scoreError = "读取当前分数失败（登录态失效或网络异常）"
             } else {
                 currentScore = score
-                lastScore = score
             }
         }
     }
 
     /**
-     * 开始刷分。
+     * 开始增量上报。
      *
-     * @param target     目标分数，必须**严格大于** [currentScore]
-     * @param keypointId 知识点 ID；空串 = 自动扫描 1..[OldSimianPrefs.SCORE_KEYPOINT_MAX]
-     * @param limit      每局题目数（调用方已 `coerceIn`）
-     * @param intervalMs 每局间隔（毫秒，调用方已 `coerceIn`）
+     * ## 增量模式（2026-09-25 重写）
      *
-     * 参数在开始时**统一写盘**（而不是每敲一个字就写一次）：刷分参数是
-     * 「开始那一刻的快照」，中途改输入框不该影响正在跑的这一轮。
+     * 用户输入的是**增量**（要加多少分），不再是目标分数 ——
+     * 协议已确证 `postSavedExp` 按增量记账（`obtainExp`），直接上报即可，
+     * 无需取卷/整卷上传/循环逼近。
+     *
+     * @param delta 要增加的分数（正数）。超过单批上限会拆条分批上报。
      */
-    fun start(
-        target: Int,
-        keypointId: String,
-        limit: Int,
-        intervalMs: Long,
-    ) {
+    fun start(delta: Int) {
         if (running) return
         if (!OldSimianPrefs.customScoreEnabled) {
             message = "请先在「老挂戏老叟」页打开「自定义分数（刷分）」开关"
             return
         }
-        val cur = currentScore
-        if (cur == null) {
-            message = "尚未读到当前分数，请先点「刷新」"
+        if (delta <= 0) {
+            message = "增量必须大于 0"
             return
         }
-        if (target <= cur) {
-            message = "目标分数必须大于当前分数（$cur）"
-            return
-        }
-
-        val kp = keypointId.trim()
-        OldSimianPrefs.customScoreKeypoint = kp
-        OldSimianPrefs.customScoreLimit = limit
-        OldSimianPrefs.customScoreIntervalMs = intervalMs.toInt()
-        OldSimianPrefs.persist()
 
         running = true
         message = null
-        progress = "开始：当前 $cur → 目标 $target" +
-            if (kp.isEmpty()) "（知识点留空，取题失败时自动扫描）" else "（知识点 $kp）"
+        progress = "开始：本次 +$delta"
 
         job = viewModelScope.launch {
             try {
-                val result = ScorePump.pumpToTarget(
-                    keypointId = kp,
-                    limit = limit,
-                    intervalMs = intervalMs,
-                    target = target,
-                    onProgress = { current, rounds ->
-                        // current < 0 是 ScorePump 约定的「正在扫描知识点」哨兵值。
-                        if (current >= 0) lastScore = current
-                        progress = if (current < 0) {
-                            "扫描知识点中（1~${OldSimianPrefs.SCORE_KEYPOINT_MAX} 自动尝试，可随时停止）…"
-                        } else {
-                            "第 $rounds 局 · 当前 $current / 目标 $target"
-                        }
-                    },
-                    onKeypointFound = { found ->
-                        OldSimianPrefs.customScoreKeypoint = found
-                        OldSimianPrefs.persist()
+                val result = ScorePump.pumpDelta(
+                    delta = delta,
+                    onProgress = { reported, total ->
+                        progress = "已上报 $reported / $total"
                     },
                 )
                 running = false
                 progress = ""
-                result.onSuccess { finalScore ->
-                    currentScore = finalScore
-                    lastScore = finalScore
-                    message = "成功：已刷到 $finalScore 分"
+                result.onSuccess { reported ->
+                    message = "成功：本次 +$reported（点「刷新」读最新分数）"
+                    refreshScore()
                 }.onFailure { t ->
                     message = "失败：${t.message ?: t}"
-                    refreshScore()
                 }
             } catch (c: CancellationException) {
-                // 走到这里 = 用户点了「停止」（ScorePump 已把单次超时排除掉）。
                 running = false
                 progress = ""
-                message = "已停止。停止前最后读数 ${lastScore ?: "未知"}，可点「刷新」确认。"
-                // 协程已取消，不能在这里调 suspend 刷新分数 —— 交给用户手动刷新。
+                message = "已停止。"
                 throw c
             }
         }
