@@ -67,7 +67,9 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 4. 自定义结算时间 —— 每题 `costTime` 固定为配置值（下限 5ms）
  * 5. 结束页自动化 —— PK 结算页自动开下一局（注入 JS）
  * 6. 去除排行榜展示动效 —— CSS 动画归零 + 静音（注入 JS）
- * 7. 自定义分数（刷分）—— 走 `PUT /leo-math/android/exams/v2/{examId}`
+ * 7. **PK 自动提交画笔** —— 题目页自动注入笔迹并触发画板提交
+ *    （注入 `js/pk_auto_stroke.js`，遍历 Vue 组件树找活体画板）
+ * 8. 自定义分数（刷分）—— 走 `PUT /leo-math/android/exams/v2/{examId}`
  *    （`uploadExamResult`，练习成绩上传主接口），循环「取卷 → 全对填充 → 上传」
  *    直到 `curWeekScore ≥ 目标`。算法在 [cn.apixiaoyuan.app.core.oldsimian.ScorePump]，
  *    状态机在 `ScorePumpViewModel`，参数页是本文件顶部的「打开刷分页」入口。
@@ -148,7 +150,10 @@ fun OldSimianScreen(navController: NavHostController) {
                     // 用输入框而不是 Slider：范围 5..10000 跨度太大，
                     // 线性滑条每像素约 30ms，根本够不到 5ms 这种精确值。
                     CostFieldRow(
+                        title = "每题耗时",
                         value = OldSimianPrefs.customCostMs,
+                        range = OldSimianPrefs.COST_RANGE_MIN..OldSimianPrefs.COST_RANGE_MAX,
+                        unit = " ms",
                         onCommit = {
                             OldSimianPrefs.customCostMs = it
                             OldSimianPrefs.persist()
@@ -188,6 +193,37 @@ fun OldSimianScreen(navController: NavHostController) {
                         OldSimianPrefs.persist()
                     },
                 )
+                SwitchRow(
+                    title = "自动提交画笔",
+                    summary = "题目页自动注入笔迹并触发提交（遍历 Vue 组件树找活体画板）",
+                    checked = OldSimianPrefs.pkStrokeEnabled,
+                    onCheckedChange = {
+                        OldSimianPrefs.pkStrokeEnabled = it
+                        OldSimianPrefs.persist()
+                    },
+                )
+                if (OldSimianPrefs.pkStrokeEnabled) {
+                    CostFieldRow(
+                        title = "提交次数",
+                        value = OldSimianPrefs.pkStrokeCount,
+                        range = OldSimianPrefs.PK_STROKE_COUNT_MIN..
+                            OldSimianPrefs.PK_STROKE_COUNT_MAX,
+                        onCommit = {
+                            OldSimianPrefs.pkStrokeCount = it
+                            OldSimianPrefs.persist()
+                        },
+                    )
+                    CostFieldRow(
+                        title = "两次提交间隔",
+                        value = OldSimianPrefs.pkStrokeIntervalMs,
+                        range = OldSimianPrefs.PK_STROKE_INTERVAL_MIN..
+                            OldSimianPrefs.PK_STROKE_INTERVAL_MAX,
+                        onCommit = {
+                            OldSimianPrefs.pkStrokeIntervalMs = it
+                            OldSimianPrefs.persist()
+                        },
+                    )
+                }
             }
 
             // ==================== 分数 ====================
@@ -335,28 +371,37 @@ private fun EntryRow(
 }
 
 /**
- * 每题耗时输入行。
+ * 数字输入行（通用）。
  *
  * 用 miuix [TextField]（`value: String` 重载）+ `KeyboardType.Number` 而不是
- * [SliderRow]：可调范围是 5..10000ms，线性滑条在 360dp 宽下每像素约 30ms，
- * **根本选不到 5ms**。输入框能精确落值，也顺手把非法输入过滤掉。
+ * [SliderRow]：调用方的取值范围跨度都很大（耗时 5..10000、提交次数 1..50），
+ * 线性滑条在 360dp 宽下每像素几十个单位，**根本选不到精确值**。
+ * 输入框能精确落值，也顺手把非法输入过滤掉。
  *
- * 写盘时机：每次文本变化就解析并写盘，但**只在解析成功且在范围内时**才写 ——
+ * 写盘时机：每次文本变化就解析并写盘，但**只在解析成功时**才写 ——
  * 清空重输的过程中会短暂出现空串，那时不动 prefs，避免把配置写成 0。
  *
  * `remember(value)` 而不是 `remember`：写盘后 `value` 被 `coerceIn` 夹过
  * （如输入 99999 → 10000），这一步会重建文本，让输入框立刻显示真实生效值，
  * 不会出现「框里 99999、实际 10000」的错位。
+ *
+ * @param title  行标题
+ * @param value  当前生效值
+ * @param range  合法区间；越界输入会被夹到边界后写盘
+ * @param unit   单位后缀，仅用于「当前生效」提示
  */
 @Composable
 private fun CostFieldRow(
+    title: String,
     value: Int,
+    range: IntRange,
+    unit: String = "",
     onCommit: (Int) -> Unit,
 ) {
     var text by remember(value) { mutableStateOf(value.toString()) }
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            text = "每题耗时",
+            text = title,
             color = MiuixTheme.colorScheme.onSurfaceContainer,
         )
         TextField(
@@ -365,21 +410,18 @@ private fun CostFieldRow(
                 val digits = raw.filter(Char::isDigit)
                 text = digits
                 digits.toIntOrNull()?.let { parsed ->
-                    val clamped = parsed.coerceIn(
-                        OldSimianPrefs.COST_RANGE_MIN,
-                        OldSimianPrefs.COST_RANGE_MAX,
-                    )
+                    val clamped = parsed.coerceIn(range.first, range.last)
                     if (clamped != value) onCommit(clamped)
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            label = "毫秒，${OldSimianPrefs.COST_RANGE_MIN}~${OldSimianPrefs.COST_RANGE_MAX}",
+            label = "${range.first}~${range.last}",
             useLabelAsPlaceholder = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
         )
         Text(
-            text = "当前生效：$value ms",
+            text = "当前生效：$value$unit",
             color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
         )
     }

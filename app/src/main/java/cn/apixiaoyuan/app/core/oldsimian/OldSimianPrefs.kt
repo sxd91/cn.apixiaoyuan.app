@@ -50,6 +50,9 @@ object OldSimianPrefs {
     private const val KEY_AUTO_NEXT_ROUND = "auto_next_round"
     private const val KEY_NEXT_ROUND_INTERVAL_MS = "next_round_interval_ms"
     private const val KEY_NO_RANKING_ANIM = "no_ranking_anim"
+    private const val KEY_PK_STROKE_ENABLED = "pk_stroke_enabled"
+    private const val KEY_PK_STROKE_COUNT = "pk_stroke_count"
+    private const val KEY_PK_STROKE_INTERVAL_MS = "pk_stroke_interval"
 
     /**
      * 每题耗时的下限（毫秒）。与
@@ -90,6 +93,16 @@ object OldSimianPrefs {
 
     /** 刷分最多刷多少局（防死循环），同 cn.nizou.sxd `ScorePump.MAX_ROUNDS`。 */
     const val SCORE_MAX_ROUNDS = 1000
+
+    /** PK 自动提交画笔：提交次数范围。 */
+    const val PK_STROKE_COUNT_MIN = 1
+    const val PK_STROKE_COUNT_MAX = 50
+    const val PK_STROKE_COUNT_DEFAULT = 1
+
+    /** PK 自动提交画笔：两次提交间隔范围（毫秒）。 */
+    const val PK_STROKE_INTERVAL_MIN = 0
+    const val PK_STROKE_INTERVAL_MAX = 10_000
+    const val PK_STROKE_INTERVAL_DEFAULT = 1200
 
     @Volatile
     private var appContext: Context? = null
@@ -229,6 +242,36 @@ object OldSimianPrefs {
      */
     var noRankingAnim by mutableStateOf(false)
 
+    /**
+     * PK 自动提交画笔。
+     *
+     * 开启后，PK 题目页加载完成时注入 `assets/js/pk_auto_stroke.js`：
+     * 遍历 Vue 组件树找到活体画板实例，注入固定点集并派发 `endStroke`
+     * 事件，触发画板自己的识别 + 上报逻辑。
+     *
+     * ## 为什么这条路必须走 Vue 内部
+     *
+     * PK 是 Vue 3 H5，画板不是 DOM 元素而是 `useRecognizeBoard` 内部的局部
+     * `ref`（真机 probe 已证实不在 Pinia store 里），所以只能从组件树的
+     * `setupState` 里捞。脚本里保留了四级 `__vue_app__` 查找兜底
+     * （app-el → app-descendant → document-scan → window）。
+     *
+     * ## 与「练习 · 提交画笔」的区别
+     *
+     * [strokeEnabled] 管的是**本项目自己的练习提交**（自己组装的请求体里填
+     * `script` 字段）；本开关管的是 **PK 页（H5）内部的画板**，两者链路完全不同，
+     * 不要互相替代。
+     *
+     * 默认关。
+     */
+    var pkStrokeEnabled by mutableStateOf(false)
+
+    /** PK 自动提交画笔：提交次数。 */
+    var pkStrokeCount by mutableStateOf(PK_STROKE_COUNT_DEFAULT)
+
+    /** PK 自动提交画笔：两次提交间隔（毫秒）。 */
+    var pkStrokeIntervalMs by mutableStateOf(PK_STROKE_INTERVAL_DEFAULT)
+
     /** 由 `App.onCreate` 调用。 */
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -252,6 +295,11 @@ object OldSimianPrefs {
         nextRoundIntervalMs = p.getInt(KEY_NEXT_ROUND_INTERVAL_MS, 1500)
             .coerceIn(NEXT_ROUND_INTERVAL_MIN, NEXT_ROUND_INTERVAL_MAX)
         noRankingAnim = p.getBoolean(KEY_NO_RANKING_ANIM, false)
+        pkStrokeEnabled = p.getBoolean(KEY_PK_STROKE_ENABLED, false)
+        pkStrokeCount = p.getInt(KEY_PK_STROKE_COUNT, PK_STROKE_COUNT_DEFAULT)
+            .coerceIn(PK_STROKE_COUNT_MIN, PK_STROKE_COUNT_MAX)
+        pkStrokeIntervalMs = p.getInt(KEY_PK_STROKE_INTERVAL_MS, PK_STROKE_INTERVAL_DEFAULT)
+            .coerceIn(PK_STROKE_INTERVAL_MIN, PK_STROKE_INTERVAL_MAX)
     }
 
     /** 写盘。设置页每次改动调用一次。 */
@@ -272,6 +320,9 @@ object OldSimianPrefs {
             .putBoolean(KEY_AUTO_NEXT_ROUND, autoNextRound)
             .putInt(KEY_NEXT_ROUND_INTERVAL_MS, nextRoundIntervalMs)
             .putBoolean(KEY_NO_RANKING_ANIM, noRankingAnim)
+            .putBoolean(KEY_PK_STROKE_ENABLED, pkStrokeEnabled)
+            .putInt(KEY_PK_STROKE_COUNT, pkStrokeCount)
+            .putInt(KEY_PK_STROKE_INTERVAL_MS, pkStrokeIntervalMs)
             .apply()
     }
 

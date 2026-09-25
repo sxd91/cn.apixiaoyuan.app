@@ -25,10 +25,11 @@ import android.webkit.WebView
  *
  *  | 脚本 | 对应开关 | 作用 |
  *  |---|---|---|
- *  | `js/pk_no_anim.js`   | [OldSimianPrefs.noRankingAnim] | CSS 动画/过渡归零 + 音效静音 |
- *  | `js/pk_auto_next.js` | [OldSimianPrefs.autoNextRound] | 结算页自动开下一局 |
+ *  | `js/pk_no_anim.js`    | [OldSimianPrefs.noRankingAnim]  | CSS 动画/过渡归零 + 音效静音 |
+ *  | `js/pk_auto_next.js`  | [OldSimianPrefs.autoNextRound]  | 结算页自动开下一局 |
+ *  | `js/pk_auto_stroke.js`| [OldSimianPrefs.pkStrokeEnabled]| 题目页自动注入笔迹并提交 |
  *
- * 两者独立：只想去动画、不想自动连开的人可以只开前者。
+ * 三者独立：只想去动画、不想自动连开、或只想自动交笔迹的人可以各开各的。
  */
 object PkJsInjector {
 
@@ -51,7 +52,7 @@ object PkJsInjector {
      */
     fun injectIfEnabled(webView: WebView): Int {
         val prefs = OldSimianPrefs
-        if (!prefs.noRankingAnim && !prefs.autoNextRound) return 0
+        if (!prefs.noRankingAnim && !prefs.autoNextRound && !prefs.pkStrokeEnabled) return 0
         if (injected[webView] == true) return 0
         injected[webView] = true
 
@@ -64,6 +65,23 @@ object PkJsInjector {
             val interval = prefs.nextRoundIntervalMs.coerceAtLeast(0)
             webView.evaluateJavascript("window.__pk_next_interval=$interval;", null)
             if (inject(webView, "js/pk_auto_next.js")) count++
+        }
+        if (prefs.pkStrokeEnabled) {
+            // 同套路：先把参数写进 window，再注入主脚本。
+            // 脚本读 window.__pk_stroke_count / window.__pk_stroke_interval。
+            val n = prefs.pkStrokeCount.coerceIn(
+                OldSimianPrefs.PK_STROKE_COUNT_MIN,
+                OldSimianPrefs.PK_STROKE_COUNT_MAX,
+            )
+            val iv = prefs.pkStrokeIntervalMs.coerceIn(
+                OldSimianPrefs.PK_STROKE_INTERVAL_MIN,
+                OldSimianPrefs.PK_STROKE_INTERVAL_MAX,
+            )
+            webView.evaluateJavascript(
+                "window.__pk_stroke_count=$n;window.__pk_stroke_interval=$iv;",
+                null,
+            )
+            if (inject(webView, "js/pk_auto_stroke.js")) count++
         }
         return count
     }
