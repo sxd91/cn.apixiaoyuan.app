@@ -74,7 +74,7 @@ interface LeoOralApiService {
      *  - `userAnswer` —— 用户作答
      *  - `script` —— 笔迹 JSON
      *  - `status` —— 1 对 / -1 错
-     *  - `costTime` —— 每题耗时，**服务端下限 300ms**
+     *  - `costTime` —— 每题耗时，**下限 5ms**（真机实测）
      *
      * 以及整卷的 `correctCnt` / `costTime`。
      *

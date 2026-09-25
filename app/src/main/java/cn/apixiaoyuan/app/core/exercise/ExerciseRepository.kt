@@ -151,7 +151,7 @@ object ExerciseRepository {
      * PUT `/leo-math/android/exams/v2/{examId}`，body 带 `@NeedEncode`。
      *
      * 提交前调用方须把 [ExamData.questions] 里每题填好
-     * `userAnswer` / `status` / `costTime`（**下限 300ms**），
+     * `userAnswer` / `status` / `costTime`（**下限 5ms**），
      * 以及整卷的 `correctCnt` / `costTime`。
      *
      * 失败返回 null。

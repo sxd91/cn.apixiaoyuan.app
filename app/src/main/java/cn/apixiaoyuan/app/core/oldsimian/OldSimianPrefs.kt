@@ -51,11 +51,16 @@ object OldSimianPrefs {
     private const val KEY_NEXT_ROUND_INTERVAL_MS = "next_round_interval_ms"
     private const val KEY_NO_RANKING_ANIM = "no_ranking_anim"
 
-    /** 每题耗时的服务端下限（毫秒）。与 [cn.apixiaoyuan.app.core.model.ExamQuestion.MIN_COST_TIME_MS] 同值。 */
-    const val MIN_COST_MS = 300
+    /**
+     * 每题耗时的下限（毫秒）。与
+     * [cn.apixiaoyuan.app.core.model.ExamQuestion.MIN_COST_TIME_MS] 同值。
+     *
+     * 真机实测 5ms 可正常提交 —— 此前写 300 是照抄参考项目常量的错误结论。
+     */
+    const val MIN_COST_MS = 5
 
     /** 自定义结算时间的可调范围（毫秒）。上限给到 10s —— 再长没有实用价值且更可疑。 */
-    const val COST_RANGE_MIN = 300
+    const val COST_RANGE_MIN = 5
     const val COST_RANGE_MAX = 10_000
 
     /** 「结束页自动化」自动开下一局的间隔范围（毫秒）。 */
@@ -134,7 +139,7 @@ object OldSimianPrefs {
     /** 是否启用自定义结算时间。默认关。 */
     var customCostEnabled by mutableStateOf(false)
 
-    /** 自定义每题耗时（毫秒），范围 [COST_RANGE_MIN]..[COST_RANGE_MAX]。默认取服务端下限。 */
+    /** 自定义每题耗时（毫秒），范围 [COST_RANGE_MIN]..[COST_RANGE_MAX]。默认取下限。 */
     var customCostMs by mutableStateOf(MIN_COST_MS)
 
     // ---- 账号：名字限制 ----

@@ -25,8 +25,7 @@ import kotlin.random.Random
  * ```
  *
  * **提交体的关键约束**（逐条来自原版与 cn.nizou.sxd 的实战结论）：
- *  - 每题 `costTime` **下限 300ms** —— 低于这个值服务端验证不过
- *    （见 `ExamQuestion.MIN_COST_TIME_MS`）
+ *  - 每题 `costTime` **下限 5ms**（真机实测边界，见 `ExamQuestion.MIN_COST_TIME_MS`）
  *  - `status` 必须与 `userAnswer` 一致：答对 = 1，答错 = -1
  *  - 整卷 `correctCnt` = 答对题数；`costTime` = 各题之和
  *
@@ -161,7 +160,7 @@ class ExamViewModel : ViewModel() {
      * 组装提交体。
      *
      * 逐题：填 `userAnswer`、`status`（1 / -1）、`costTime`
-     * （**下限 300ms**，不足补到 300 —— 原版服务端校验）。
+     * （**下限 5ms**，不足补到 5 —— 真机实测边界）。
      * 整卷：`correctCnt` = 答对题数，`costTime` = 各题之和。
      *
      * **「老挂戏老叟」开关接入点**（本项目是内置客户端，这里改的是自己
@@ -174,7 +173,7 @@ class ExamViewModel : ViewModel() {
      *  - [OldSimianPrefs.strokeEnabled]：每题 `script` 由 [OralStrokes] 按
      *    该题实际提交的 `userAnswer` 生成（「按题目数量提交等量画笔」）；
      *  - [OldSimianPrefs.customCostEnabled]：每题 `costTime` 固定为
-     *    [OldSimianPrefs.customCostMs]（存储层已保证 ≥ 300ms）。
+     *    [OldSimianPrefs.customCostMs]（存储层已保证 ≥ 5ms）。
      */
     private fun buildSubmitBody(current: ExamData): ExamData {
         val autoCorrect = OldSimianPrefs.autoCorrect
@@ -210,7 +209,7 @@ class ExamViewModel : ViewModel() {
             }
             val status = if (correct) ExamQuestion.STATUS_RIGHT else ExamQuestion.STATUS_WRONG
 
-            // costTime 下限 300ms；未作答的题给一个随机值（300..450），
+            // costTime 下限 5ms；未作答的题给一个随机值（下限..下限+150），
             // 避免整卷耗时完全相同被风控识别（cn.nizou.sxd 同款做法）。
             // 「未作答」= 用户没点过，且没有开启任何代答（自动全对 / 自定义答案）。
             val raw = costTimes[q.id] ?: 0L

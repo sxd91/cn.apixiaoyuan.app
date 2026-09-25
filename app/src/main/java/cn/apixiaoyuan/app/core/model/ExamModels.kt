@@ -86,7 +86,13 @@ data class ExamQuestion(
     @SerialName("status") val status: Int = STATUS_NOT_DONE,
     @SerialName("errorState") val errorState: Int = 0,
     @SerialName("wrongScript") val wrongScript: String? = null,
-    /** 本题耗时（毫秒）。**服务端校验下限 300ms**（见 cn.nizou.sxd PracticeHook）。 */
+    /**
+     * 本题耗时（毫秒）。
+     *
+     * **下限 5ms**（真机实测）。此前这里写「服务端校验下限 300ms」是错的 ——
+     * 那个数是照抄参考项目 cn.nizou.sxd `PracticeHook` 的常量，并非服务端约束，
+     * 实测 5ms 也能正常提交。下限仍保留（0ms 明显不自然），但已放宽到真实边界。
+     */
     @SerialName("costTime") val costTime: Long = 0L,
     @SerialName("examId") val examId: Int = 0,
     @SerialName("keypointId") val keypointId: Int? = null,
@@ -108,7 +114,7 @@ data class ExamQuestion(
         /** 答错。 */
         const val STATUS_WRONG = -1
 
-        /** 提交时每题耗时的服务端下限（毫秒）。 */
-        const val MIN_COST_TIME_MS = 300L
+        /** 提交时每题耗时的下限（毫秒）。真机实测 5ms 可正常提交。 */
+        const val MIN_COST_TIME_MS = 5L
     }
 }

@@ -48,7 +48,7 @@ import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
  * 手写板（原版 `ScriptBoard` + tflite 笔迹识别）不在本轮——那是独立的
  * 识别链路，本页先用「点选答案」方式完成作答闭环，保证整条链路可跑通。
  *
- * 每题 `costTime` 下限 **300ms**（原版服务端校验），作答时间从进页面开始计。
+ * 每题 `costTime` 下限 **5ms**（真机实测边界），作答时间从进页面开始计。
  *
  * @param keypointId 知识点 ID
  * @param limit      题目数量

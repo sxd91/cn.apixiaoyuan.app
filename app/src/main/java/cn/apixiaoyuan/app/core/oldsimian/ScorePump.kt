@@ -70,8 +70,13 @@ object ScorePump {
     /** 正常取题 / 上传 / 读分数的超时（毫秒），同参考项目的 15s。 */
     private const val OP_TIMEOUT_MS = 15_000L
 
-    /** 本题耗时的随机下限 / 上限（毫秒）。服务端下限 300ms，上浮一点避免整卷同值。 */
-    private const val COST_MIN_MS = 300L
+    /**
+     * 本题耗时的随机下限 / 上限（毫秒）。
+     *
+     * 下限 5ms 是真机实测的边界（此前写 300 是照抄参考项目常量的错误结论），
+     * 上限 450ms 仍保留 —— 刷分卷子的耗时不必贴近下限，留一点随机避免整卷同值。
+     */
+    private const val COST_MIN_MS = 5L
     private const val COST_MAX_MS = 450L
 
     /**
@@ -150,7 +155,7 @@ object ScorePump {
      * `buildSubmitBody` 在 `autoCorrect = true` 时的口径**逐条一致**：
      *  - 每题 `userAnswer` = 服务端下发的正确答案（`answers.first()`）；
      *  - 每题 `status` = [ExamQuestion.STATUS_RIGHT]；
-     *  - 每题 `costTime` = 随机 300~450ms，再过 [OldSimianPrefs.costTimeFor]
+     *  - 每题 `costTime` = 随机 5~450ms，再过 [OldSimianPrefs.costTimeFor]
      *    （即用户若开了「自定义结算时间」，刷分也沿用同一个值）；
      *  - 每题 `script` = [OralStrokes] 按该题答案生成的笔迹 JSON。
      *    **这里不判断 `strokeEnabled`**：本函数只服务于自动刷分，而原版客户端
