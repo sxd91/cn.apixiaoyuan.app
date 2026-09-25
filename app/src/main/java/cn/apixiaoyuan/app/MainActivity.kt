@@ -24,6 +24,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -43,6 +44,8 @@ import cn.apixiaoyuan.app.core.design.glass.TabBarMode
 import cn.apixiaoyuan.app.core.design.glass.TabItem
 import cn.apixiaoyuan.app.core.design.theme.ReverseOldGuyTheme
 import cn.apixiaoyuan.app.core.design.theme.ThemePrefs
+import cn.apixiaoyuan.app.core.totp.TotpGate
+import cn.apixiaoyuan.app.core.totp.TotpGateDialog
 import cn.apixiaoyuan.app.core.navigation.AppNavHost
 import cn.apixiaoyuan.app.core.navigation.RouteApi
 import cn.apixiaoyuan.app.core.navigation.RouteHome
@@ -96,6 +99,15 @@ class MainActivity : ComponentActivity() {
  */
 @Composable
 private fun AppShell() {
+    // TOTP 门禁：未通过验证时不渲染主界面（内容根本不组合，不是遮罩 ——
+    // 遮罩能被返回键/手势绕过，组合级拦截不能）。
+    var totpPassed by remember { mutableStateOf(TotpGate.isVerified()) }
+
+    if (!totpPassed) {
+        TotpGateDialog(onPassed = { totpPassed = true })
+        return
+    }
+
     val tabs = remember {
         listOf(
             TabItem("首页", "Home"),
