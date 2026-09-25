@@ -32,7 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.App
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import cn.apixiaoyuan.app.core.navigation.RouteAccount
 import cn.apixiaoyuan.app.core.navigation.RouteExercise
@@ -59,13 +59,8 @@ import com.materialkolor.dynamiccolor.ColorSpec
  */
 @Composable
 fun HomeScreen(navController: NavHostController) {
-    AppScaffold(title = "逆向系老挂", onBack = null) { pad: PaddingValues ->
+    AppScrollScaffold(title = "逆向系老挂", onBack = null) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad)
-                .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
@@ -80,7 +75,6 @@ fun HomeScreen(navController: NavHostController) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            PaletteCard()
             SessionCard(onClick = { navController.navigate(RouteAccount) })
 
             Text(
@@ -124,86 +118,6 @@ private data class QuickEntry(
     val subtitle: String,
     val route: Any,
 )
-
-/**
- * 莫奈色板预览卡。
- *
- * 读 [App] 的四个全局状态：[App.colorScheme]、[App.paletteStyle]、
- * [App.colorSpec]、[App.seedColor]。这四个状态由 [ReverseOldGuyTheme]
- * 在每次重组时通过 SideEffect 写回，这里是只读消费。
- *
- * 五个色块依次取 ColorScheme 的 primary / secondary / tertiary /
- * surfaceVariant / error，用来肉眼核对取色是否符合预期。
- */
-@Composable
-private fun PaletteCard() {
-    val scheme = App.colorScheme
-    val swatches = listOfNotNull(
-        scheme?.primary,
-        scheme?.secondary,
-        scheme?.tertiary,
-        scheme?.surfaceVariant,
-        scheme?.error,
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = "莫奈色板",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-
-            if (swatches.isEmpty()) {
-                Text(
-                    text = "取色未就绪",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    swatches.forEach { color ->
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(color),
-                        )
-                    }
-                }
-            }
-
-            // material-kolor 5.0.0 的 ColorSpec 只扫到 SPEC_2025 一个已确证常量，
-            // 其他版本按未知处理，不写猜测的枚举名。
-            val specLabel = if (App.colorSpec == ColorSpec.SpecVersion.SPEC_2025) "2025" else "其他"
-            Text(
-                text = "风格 ${App.paletteStyle.name} · 规范 $specLabel · 种子 ${seedHex(App.seedColor)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/** 把种子色格式化成 `#AARRGGBB`，给色板卡展示用。 */
-private fun seedHex(color: Color): String {
-    val argb = color.toArgb()
-    return "#%08X".format(argb)
-}
 
 /**
  * 登录态卡（用户卡片）。

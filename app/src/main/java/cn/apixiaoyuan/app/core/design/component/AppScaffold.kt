@@ -1,11 +1,17 @@
 package cn.apixiaoyuan.app.core.design.component
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -110,16 +116,28 @@ fun AppScaffold(
     ) { innerPadding ->
         // innerPadding 已含顶栏高度（顶栏自带 statusBars）与 navigationBars（底部手势条）。
         //
-        // **这里不再加底栏高度**（2026-09-25 修正）：底栏是浮层，内容必须能滑到它
-        // 下面才能被折射。此前把 LocalBottomBarInset 加在这里，等于把整个页面
-        // 顶上去，玻璃下面空无一物 —— 液态玻璃的设计意图完全落空。
+        // ## 顶栏渐变模糊为何此前只在部分页面生效（2026-09-25 修正）
         //
-        // 底栏高度改由滚动容器消费：见下方 [LocalScrollBottomLimit] 的提供，
-        // LazyColumn / Column 的滚动终点才抬高它（最后一项滚到不被遮挡处）。
+        // 此前把 `innerPadding`（含顶栏高度）当成**容器 padding** 传给内容区，
+        // 页面又普遍写成 `Modifier.padding(pad)` —— 内容被整块下移了一个顶栏高度，
+        // 永远到不了顶栏下方。而 backdrop 记录的是内容层，
+        // 顶栏区域采到的就只有 `drawRect(surfaceColor)` 那层纯色底 ——
+        // 模糊看起来跟实色顶栏没差别，于是「只有内容够长、滚动时顶部恰好有
+        // 内容经过的页面」才偶尔看得出模糊。
+        //
+        // 正确做法（对齐 miuix 官方 example：`Scaffold` topBar 用 BlurredBar，
+        // 内容层挂 layerBackdrop，顶栏高度交给**滚动容器**的 contentPadding）：
+        // 容器 Box 只吃 top=0，把顶栏高度作为 `LocalTopBarInset` 下发，
+        // 由滚动容器（LazyColumn contentPadding / Column 的第一个 spacer）消费。
+        // 这样内容滚动时会**经过顶栏下方**，模糊层才真正有东西可采。
+        //
+        // 同理底栏高度也不进容器 padding（见 [LocalScrollBottomLimit]）。
         val barInset = LocalBottomBarInset.current
         val barExtra = if (barInset.isSpecified) barInset else 0.dp
-        val bottom = innerPadding.calculateBottomPadding() + bottomInset
-        CompositionLocalProvider(LocalScrollBottomLimit provides barExtra) {
+        CompositionLocalProvider(
+            LocalScrollBottomLimit provides barExtra,
+            LocalTopBarInset provides innerPadding.calculateTopPadding(),
+        ) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -128,14 +146,27 @@ fun AppScaffold(
             ) {
                 content(
                     PaddingValues(
-                        top = innerPadding.calculateTopPadding(),
-                        bottom = bottom,
+                        // 容器不再吃顶栏高度 —— 交给滚动容器，内容才能滚到顶栏下方。
+                        top = 0.dp,
+                        bottom = innerPadding.calculateBottomPadding() + bottomInset,
                     )
                 )
             }
         }
     }
 }
+
+/**
+ * 顶栏高度（含 statusBars）。
+ *
+ * 由 `AppScaffold` 下发，供滚动容器作为**顶部 contentPadding** 消费 ——
+ * 目的是让内容的初始位置落在顶栏下方（不被遮），但滚动时能穿过顶栏下方，
+ * 使 `progressiveTextureBlur` 采到真实内容形成渐变模糊。
+ *
+ * 注意与「容器 padding」的区别：放进容器 padding 会把内容**永久裁在**顶栏下方，
+ * backdrop 永远采不到东西，模糊等于没有。这是本次修正的核心。
+ */
+val LocalTopBarInset = staticCompositionLocalOf { 0.dp }
 
 /**
  * 滚动容器应追加的**底部限位**。
@@ -225,18 +256,60 @@ fun AppListScaffold(
     content: LazyListScope.() -> Unit,
 ) {
     AppScaffold(title = title, onBack = onBack, modifier = modifier, bottomInset = bottomInset) { pad ->
+        // 顶栏高度作为 contentPadding.top（不是容器 padding）——
+        // 内容初始落在顶栏下方，滚动时穿过顶栏下面，模糊层才有内容可采。
+        val topInset = LocalTopBarInset.current
         // 滚动终点抬高底栏高度：内容仍可滑到底栏**下方**（玻璃折射成立），
-        // 但最后一项能滚到「不被底栏遮挡」的位置 —— 消费的是
-        // LocalScrollBottomLimit，不是内容区 padding。
+        // 但最后一项能滚到「不被底栏遮挡」的位置。
         val scrollLimit = LocalScrollBottomLimit.current
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = pad.calculateTopPadding(),
+                top = topInset,
                 bottom = pad.calculateBottomPadding() + scrollLimit,
             ),
             content = content,
         )
+    }
+}
+
+/**
+ * 滚动形态骨架：`Column` + `verticalScroll`，内容由调用方给。
+ *
+ * 与 [AppListScaffold] 的区别只是容器（Column 而非 LazyColumn），
+ * **滚动限位 / 顶栏 inset 的处理完全一致** —— 这是本次修正的重点：
+ *
+ * 此前各滚动页面自己写 `Modifier.fillMaxSize().verticalScroll().padding(pad)`，
+ * 而 `pad` 含顶栏高度，等于把内容永久裁在顶栏下方，顶栏的
+ * `progressiveTextureBlur` 永远采不到内容 → 模糊看着跟实色没区别。
+ * 统一用本骨架后，顶栏高度进 Column 的**首个 spacer**，内容滚动时会
+ * 经过顶栏下方，所有滚动页面的渐变模糊才真正生效。
+ *
+ * @param bottomInset 内容底部额外留白
+ */
+@Composable
+fun AppScrollScaffold(
+    title: String,
+    onBack: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    bottomInset: Dp = 24.dp,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    AppScaffold(title = title, onBack = onBack, modifier = modifier, bottomInset = bottomInset) { pad ->
+        val topInset = LocalTopBarInset.current
+        val scrollLimit = LocalScrollBottomLimit.current
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+        ) {
+            // 顶栏占位：让内容初始位置在顶栏下方，但它是**滚动内容的一部分**，
+            // 不是容器裁剪 —— 内容滚动时会经过顶栏下方，模糊即可采到。
+            Spacer(Modifier.height(topInset))
+            content(pad)
+            Spacer(Modifier.height(pad.calculateBottomPadding() + scrollLimit + bottomInset))
+        }
     }
 }
 

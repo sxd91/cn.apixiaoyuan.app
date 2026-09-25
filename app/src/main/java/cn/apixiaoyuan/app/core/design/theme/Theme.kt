@@ -31,7 +31,7 @@ fun ReverseOldGuyTheme(
     darkTheme: Boolean = ThemePrefs.resolveDark(isSystemInDarkTheme()),
     paletteStyle: PaletteStyle = App.paletteStyle,
     colorSpec: ColorSpec.SpecVersion = App.colorSpec,
-    seedColor: Color = App.seedColor,
+    seedColor: Color = ThemePrefs.resolveSeed(),
     content: @Composable () -> Unit,
 ) {
     val scheme: ColorScheme = rememberDynamicColorScheme(

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,11 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.border
 import androidx.navigation.NavHostController
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.design.component.LocalScrollBottomLimit
 import cn.apixiaoyuan.app.core.design.theme.PageTransitionAnimation
 import cn.apixiaoyuan.app.core.design.theme.PageTransitionPrefs
@@ -94,13 +95,8 @@ fun SettingsScreen(navController: NavHostController) {
         }.getOrElse { "导入失败：${it.message}" }
     }
 
-    AppScaffold(title = "设置", onBack = null) { pad: PaddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(pad)
-                .padding(horizontal = 16.dp),
-        ) {
+    AppScrollScaffold(title = "设置", onBack = null) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             // ---- 外观 ----
             SettingGroup(title = "外观") {
                 // 主题模式：三态单选，展开式。
@@ -133,15 +129,36 @@ fun SettingsScreen(navController: NavHostController) {
                         )
                     }
                 }
-                // 种子颜色：预设色板圆点。
-                OptionGroup(label = "种子颜色") {
-                    ThemePrefs.presetSeedColors.forEach { color ->
-                        ColorDot(
-                            color = color,
-                            selected = ThemePrefs.seedColor == color,
-                            onClick = { ThemePrefs.seedColor = color; ThemePrefs.persist() },
-                        )
+                // 动态壁纸取色（对齐老挂戏老叟 ThemeSettings.dynamicWallpaper）。
+                // 开启后种子取系统壁纸强调色（SDK 31+），并隐藏上面的种子色设置。
+                SettingRow(
+                    title = "动态壁纸取色",
+                    description = if (ThemePrefs.dynamicWallpaper) {
+                        "已开启 · 使用系统壁纸强调色（需 Android 12+）"
+                    } else {
+                        "使用系统壁纸强调色作为种子，需 Android 12+"
+                    },
+                    selected = ThemePrefs.dynamicWallpaper,
+                    onClick = {
+                        ThemePrefs.dynamicWallpaper = !ThemePrefs.dynamicWallpaper
+                        ThemePrefs.persist()
+                    },
+                )
+
+                // 种子颜色：预设色板圆点 + HEX 输入。
+                // 开启「动态壁纸取色」时整块隐藏 —— 种子由系统壁纸给，
+                // 再让用户自定义没有意义（老挂戏老叟同款逻辑）。
+                if (!ThemePrefs.dynamicWallpaper) {
+                    OptionGroup(label = "种子颜色") {
+                        ThemePrefs.presetSeedColors.forEach { color ->
+                            ColorDot(
+                                color = color,
+                                selected = ThemePrefs.seedColor == color,
+                                onClick = { ThemePrefs.seedColor = color; ThemePrefs.persist() },
+                            )
+                        }
                     }
+                    SeedHexRow()
                 }
                 // 底栏效果：三态。
                 OptionGroup(label = "底栏效果") {
@@ -276,6 +293,80 @@ private fun OptionChip(
             style = MaterialTheme.typography.bodyMedium,
             color = fg,
         )
+    }
+}
+
+/**
+ * 种子色的 HEX 输入行。
+ *
+ * 对齐老挂戏老叟 `ColorPickerWidget` 的 HEX 输入部分（那边还能弹 HSV 取色盘，
+ * 本项目先落 HEX + 预设色板，够用且不带 348 行自绘代码）：
+ *  - 输入框初值是当前种子色的 `#RRGGBB`；
+ *  - 输入合法即即时生效（不用点确认，所见即所得）；
+ *  - 非法（比如用户才输了一半）时**不改**当前值，只在下方给红字提示。
+ *
+ * 用 Material3 的 OutlinedTextField 而非 miuix TextField ——
+ * 本页其余控件都是 Material3，混用两种输入框会显得割裂。
+ */
+@Composable
+private fun SeedHexRow() {
+    var text by remember(ThemePrefs.seedColor) { mutableStateOf(ThemePrefs.seedColorHex()) }
+    var error by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = "种子色 HEX",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // 当前色圆点，给输入的 HEX 一个即时视觉反馈。
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(ThemePrefs.seedColor)
+                    .then(
+                        Modifier.border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            shape = CircleShape,
+                        ),
+                    ),
+            )
+            OutlinedTextField(
+                value = text,
+                onValueChange = { next ->
+                    text = next
+                    // 即时生效：合法就写进 prefs，非法只标红不改动。
+                    error = !ThemePrefs.setSeedColorHex(next)
+                    if (!error) ThemePrefs.persist()
+                },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                isError = error,
+                textStyle = MaterialTheme.typography.bodyMedium,
+                shape = RoundedCornerShape(12.dp),
+            )
+        }
+        if (error) {
+            Text(
+                text = "格式应为 #RRGGBB（如 #6750A4）",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
     }
 }
 

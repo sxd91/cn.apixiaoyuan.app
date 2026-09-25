@@ -33,7 +33,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 
 /**
  * 登录页。
@@ -66,13 +66,8 @@ fun LoginScreen(
         }
     }
 
-    AppScaffold(title = "登录", onBack = { navController.popBackStack() }) { pad: PaddingValues ->
+    AppScrollScaffold(title = "登录", onBack = { navController.popBackStack() }) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad)
-                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(

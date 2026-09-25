@@ -23,7 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -93,14 +93,8 @@ fun ScorePumpScreen(
         OldSimianPrefs.SCORE_INTERVAL_MAX.toLong(),
     ) ?: OldSimianPrefs.SCORE_INTERVAL_DEFAULT.toLong()
 
-    AppScaffold(title = "自定义分数", onBack = { navController.popBackStack() }) { pad: PaddingValues ->
+    AppScrollScaffold(title = "自定义分数", onBack = { navController.popBackStack() }) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad)
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ==================== 当前分数 ====================

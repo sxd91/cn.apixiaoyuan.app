@@ -28,7 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.model.ExamData
 import cn.apixiaoyuan.app.core.model.ExamQuestion
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
@@ -66,13 +66,8 @@ fun ExamScreen(
         viewModel.load(keypointId = keypointId, limit = limit)
     }
 
-    AppScaffold(title = title, onBack = { navController.popBackStack() }) { pad: PaddingValues ->
+    AppScrollScaffold(title = title, onBack = { navController.popBackStack() }) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad)
-                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             when {

@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.account.SubAccountItem
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -63,15 +63,9 @@ fun AccountScreen(
     var deleteTarget by remember { mutableStateOf<SubAccountItem?>(null) }
     var deleteCode by remember { mutableStateOf("") }
 
-    AppScaffold(title = "账号", onBack = { navController.popBackStack() }) { pad: PaddingValues ->
+    AppScrollScaffold(title = "账号", onBack = { navController.popBackStack() }) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad)
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // ==================== 当前账号 ====================
             SectionCard(title = "当前账号") {

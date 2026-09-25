@@ -46,6 +46,7 @@ object ThemePrefs {
     private const val KEY_COLOR_SPEC = "color_spec"
     private const val KEY_SEED_COLOR = "seed_color"
     private const val KEY_BOTTOM_BAR_MODE = "bottom_bar_mode"
+    private const val KEY_DYNAMIC_WALLPAPER = "dynamic_wallpaper"
 
     /** 主题模式：跟随系统 / 浅色 / 深色。 */
     enum class ThemeMode(val displayName: String) {
@@ -81,6 +82,18 @@ object ThemePrefs {
     /** 底栏渲染模式。默认液态玻璃。 */
     var bottomBarMode by mutableStateOf(BottomBarMode.LIQUID_GLASS)
 
+    /**
+     * 动态壁纸取色：用系统壁纸的强调色作种子，而不是自定义种子色。
+     *
+     * 对齐老挂戏老叟 `ThemeSettings.dynamicWallpaper`：
+     *  - 开启时种子取 `WallpaperColors` 的强调色（SDK 31+ 才有 API）；
+     *  - 设置页里开启本开关后**隐藏**「种子颜色」行（种子由系统给，自定义无意义）；
+     *  - 取不到（SDK < 31 / 用户没设壁纸 / 无权限）时回退到 [seedColor]。
+     *
+     * 默认关 —— 与老挂戏老叟一致（默认用固定种子，行为可预测）。
+     */
+    var dynamicWallpaper by mutableStateOf(false)
+
     @Volatile
     private var appContext: Context? = null
 
@@ -105,6 +118,7 @@ object ThemePrefs {
         seedColor = if (seedArgb == -1) Color(0xFF6750A4) else Color(seedArgb)
         bottomBarMode = runCatching { BottomBarMode.valueOf(p.getString(KEY_BOTTOM_BAR_MODE, null) ?: BottomBarMode.LIQUID_GLASS.name) }
             .getOrDefault(BottomBarMode.LIQUID_GLASS)
+        dynamicWallpaper = p.getBoolean(KEY_DYNAMIC_WALLPAPER, false)
 
         syncToApp()
     }
@@ -126,8 +140,74 @@ object ThemePrefs {
             .putString(KEY_COLOR_SPEC, colorSpec.name)
             .putInt(KEY_SEED_COLOR, seedColor.toArgb())
             .putString(KEY_BOTTOM_BAR_MODE, bottomBarMode.name)
+            .putBoolean(KEY_DYNAMIC_WALLPAPER, dynamicWallpaper)
             .apply()
         syncToApp()
+    }
+
+    /**
+     * 解析出真正用于取色的种子色。
+     *
+     * 优先级（对齐老挂戏老叟 `SeedResolver`）：
+     *  1. [dynamicWallpaper] 开启 且 能取到壁纸强调色 → 用壁纸色；
+     *  2. 否则 → [seedColor]（用户自定义）。
+     *
+     * 取不到壁纸色的三种常见情况：SDK < 31、用户没设壁纸、系统没给权限。
+     * 这些都不是错误，静默回退即可 —— 取色失败不该让主题崩掉。
+     */
+    fun resolveSeed(): Color {
+        if (!dynamicWallpaper) return seedColor
+        return wallpaperAccent() ?: seedColor
+    }
+
+    /**
+     * 取系统壁纸的强调色（Android 12 / SDK 31+）。
+     *
+     * 用 `WallpaperManager.getWallpaperColors(FLAG_SYSTEM)` 拿系统壁纸的
+     * `WallpaperColors`，再按优先级取 `HINT_SUPPORTS_DARK_TEXT` 对应的色
+     * （primary > secondary > tertiary），与 AOSP 的 `DynamicColors` 口径一致。
+     *
+     * @return 强调色；取不到返回 null。
+     */
+    private fun wallpaperAccent(): Color? = runCatching {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return null
+        val ctx = appContext ?: return null
+        val wm = android.app.WallpaperManager.getInstance(ctx)
+        val colors = wm.getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM)
+            ?: return null
+        // AOSP DynamicColors 的取色优先级：primary > secondary > tertiary。
+        val accent = colors.primaryColor
+            ?: colors.secondaryColor
+            ?: colors.tertiaryColor
+            ?: return null
+        Color(accent.toArgb())
+    }.getOrNull()
+
+    /**
+     * 种子色的 HEX 文本（`#RRGGBB`），给设置页的输入框/展示用。
+     *
+     * 与老挂戏老叟 `ThemeSettings.seedColorHex()` 同格式 ——
+     * 去掉 alpha 通道，因为种子色的 alpha 没有意义（取色只用 RGB）。
+     */
+    fun seedColorHex(): String =
+        "#%06X".format(0xFFFFFF and seedColor.toArgb())
+
+    /**
+     * 从 HEX 文本设置种子色。
+     *
+     * 接受 `#RRGGBB` / `RRGGBB` / `#AARRGGBB` / `AARRGGBB` 四种写法，
+     * 解析失败时**不改动**当前值（用户可能还在输入中途）。
+     *
+     * @return 是否解析并应用成功
+     */
+    fun setSeedColorHex(hex: String): Boolean {
+        val parsed = runCatching {
+            android.graphics.Color.parseColor(
+                if (hex.startsWith("#")) hex else "#$hex",
+            )
+        }.getOrNull() ?: return false
+        seedColor = Color(parsed)
+        return true
     }
 
     /**

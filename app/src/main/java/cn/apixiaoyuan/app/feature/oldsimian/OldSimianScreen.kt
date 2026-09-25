@@ -24,7 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.navigation.RouteScorePump
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import top.yukonga.miuix.kmp.basic.Card
@@ -89,14 +89,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  */
 @Composable
 fun OldSimianScreen(navController: NavHostController) {
-    AppScaffold(title = "老挂戏老叟", onBack = { navController.popBackStack() }) { pad: PaddingValues ->
+    AppScrollScaffold(title = "老挂戏老叟", onBack = { navController.popBackStack() }) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad)
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ==================== 练习 ====================

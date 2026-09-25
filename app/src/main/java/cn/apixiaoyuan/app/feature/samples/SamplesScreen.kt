@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.database.Sample
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,12 +59,8 @@ fun SamplesScreen(
     navController: NavHostController,
     viewModel: SamplesViewModel = viewModel(),
 ) {
-    AppScaffold(title = "样本库", onBack = { navController.popBackStack() }) { pad ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(pad),
-        ) {
+    AppScrollScaffold(title = "样本库", onBack = { navController.popBackStack() }) {
+        Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -78,6 +78,8 @@ data class ThemeSnapshot(
     /** 种子色的 ARGB 整数（Color 是内联类，不能直接序列化）。 */
     val seedColorArgb: Int = -0xff9a5c, // 0xFF6750A4
     val bottomBarMode: String = ThemePrefs.BottomBarMode.LIQUID_GLASS.name,
+    /** 动态壁纸取色开关。对齐老挂戏老叟 `ThemeSettings.dynamicWallpaper`。 */
+    val dynamicWallpaper: Boolean = false,
 )
 
 /**
@@ -118,6 +120,7 @@ object ConfigTransfer {
             colorSpec = ThemePrefs.colorSpec.name,
             seedColorArgb = ThemePrefs.seedColor.toArgb(),
             bottomBarMode = ThemePrefs.bottomBarMode.name,
+            dynamicWallpaper = ThemePrefs.dynamicWallpaper,
         ),
         pageTransition = PageTransitionPrefs.animation.name,
     )
@@ -172,6 +175,7 @@ object ConfigTransfer {
         ThemePrefs.seedColor = androidx.compose.ui.graphics.Color(t.seedColorArgb)
         ThemePrefs.bottomBarMode = runCatching { ThemePrefs.BottomBarMode.valueOf(t.bottomBarMode) }
             .getOrDefault(ThemePrefs.BottomBarMode.LIQUID_GLASS)
+        ThemePrefs.dynamicWallpaper = t.dynamicWallpaper
         ThemePrefs.persist()
 
         PageTransitionPrefs.update(
