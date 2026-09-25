@@ -28,7 +28,7 @@ import cn.apixiaoyuan.app.App
  */
 @Composable
 fun ReverseOldGuyTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = ThemePrefs.resolveDark(isSystemInDarkTheme()),
     paletteStyle: PaletteStyle = App.paletteStyle,
     colorSpec: ColorSpec.SpecVersion = App.colorSpec,
     seedColor: Color = App.seedColor,

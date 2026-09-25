@@ -33,8 +33,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import cn.apixiaoyuan.app.core.design.component.LocalBottomBarInset
 import cn.apixiaoyuan.app.core.design.glass.LiquidGlassTabBar
+import cn.apixiaoyuan.app.core.design.glass.TabBarMode
 import cn.apixiaoyuan.app.core.design.glass.TabItem
 import cn.apixiaoyuan.app.core.design.theme.ReverseOldGuyTheme
+import cn.apixiaoyuan.app.core.design.theme.ThemePrefs
 import cn.apixiaoyuan.app.core.navigation.AppNavHost
 import cn.apixiaoyuan.app.core.navigation.RouteApi
 import cn.apixiaoyuan.app.core.navigation.RouteHome
@@ -169,8 +171,15 @@ private fun AppShell() {
                             // 老挂戏老叟同款：animateScrollToPage 触发平移动画。
                             scope.launch { pagerState.animateScrollToPage(index) }
                         },
-                        backdrop = backdrop,
-                        modifier = Modifier.padding(bottom = barBottomPadding),
+                            backdrop = backdrop,
+                            // 底栏效果三态来自设置页（液态玻璃 / 毛玻璃 / 纯色）。
+                            // 默认液态玻璃；低端机可降级到毛玻璃或纯色省掉背景采样开销。
+                            mode = when (ThemePrefs.bottomBarMode) {
+                                ThemePrefs.BottomBarMode.LIQUID_GLASS -> TabBarMode.LiquidGlass
+                                ThemePrefs.BottomBarMode.FROSTED -> TabBarMode.Blur
+                                ThemePrefs.BottomBarMode.SOLID -> TabBarMode.None
+                            },
+                            modifier = Modifier.padding(bottom = barBottomPadding),
                     )
                 }
             }

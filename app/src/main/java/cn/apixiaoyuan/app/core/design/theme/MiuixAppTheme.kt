@@ -59,8 +59,11 @@ fun AppMiuixTheme(
 /**
  * material-kolor 的 [PaletteStyle] 与 miuix 的 [ThemePaletteStyle] 一一对应
  * （两者都是 9 项，取值集合相同，仅包名不同）。
+ *
+ * 可见性从 private 提升为 internal：配置导出/导入需要按名字存取这两组枚举，
+ * 直接用本映射可避免两处各写一份 when 分支而漂移。
  */
-private fun PaletteStyle.toMiuixPaletteStyle(): ThemePaletteStyle = when (this) {
+internal fun PaletteStyle.toMiuixPaletteStyle(): ThemePaletteStyle = when (this) {
     PaletteStyle.TonalSpot -> ThemePaletteStyle.TonalSpot
     PaletteStyle.Neutral -> ThemePaletteStyle.Neutral
     PaletteStyle.Vibrant -> ThemePaletteStyle.Vibrant
@@ -73,7 +76,7 @@ private fun PaletteStyle.toMiuixPaletteStyle(): ThemePaletteStyle = when (this) 
 }
 
 /** material-kolor 的规范版本与 miuix 的 [ThemeColorSpec] 对应。 */
-private fun ColorSpec.SpecVersion.toMiuixColorSpec(): ThemeColorSpec = when (this) {
+internal fun ColorSpec.SpecVersion.toMiuixColorSpec(): ThemeColorSpec = when (this) {
     ColorSpec.SpecVersion.SPEC_2021 -> ThemeColorSpec.Spec2021
     ColorSpec.SpecVersion.SPEC_2025 -> ThemeColorSpec.Spec2025
 }

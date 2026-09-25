@@ -41,6 +41,21 @@ class App : Application() {
 
         /** 种子色，取色失败或用户手动指定时使用。 */
         var seedColor by mutableStateOf(Color(0xFF6750A4))
+
+        /**
+         * 主题模式（跟随系统 / 浅色 / 深色）。
+         *
+         * 由 [cn.apixiaoyuan.app.core.design.theme.ThemePrefs] 在 init 时回填 ——
+         * 这里只作「主题根读的镜像」，不自己持久化。
+         */
+        var themeMode by mutableStateOf(cn.apixiaoyuan.app.core.design.theme.ThemePrefs.ThemeMode.FOLLOW_SYSTEM)
+
+        /**
+         * 悬浮底栏的渲染模式（液态玻璃 / 毛玻璃 / 纯色）。
+         *
+         * 同上，由 [cn.apixiaoyuan.app.core.design.theme.ThemePrefs] 回填。
+         */
+        var bottomBarMode by mutableStateOf(cn.apixiaoyuan.app.core.design.theme.ThemePrefs.BottomBarMode.LIQUID_GLASS)
     }
 
     override fun onCreate() {
@@ -89,5 +104,11 @@ class App : Application() {
         // 界面级设置（二级页过渡动画）：同样是纯本地配置。
         // 必须在 AppNavHost 首次组合之前就绪，否则 PageTransitionPrefs.prefs() 会抛错。
         PageTransitionPrefs.init(this)
+
+        // 外观设置（主题模式 / 取色风格 / 颜色规格 / 种子色 / 底栏效果）。
+        // 必须在 ReverseOldGuyTheme 首次组合之前就绪 —— 它 init 时会把
+        // 上次的设置回填到 App 的同名字段，保证首帧就是用户的选择，
+        // 不会先闪一下默认紫再变。放最后，不干扰网络与会话链路。
+        cn.apixiaoyuan.app.core.design.theme.ThemePrefs.init(this)
     }
 }
