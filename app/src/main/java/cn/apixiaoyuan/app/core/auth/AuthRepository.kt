@@ -48,25 +48,65 @@ object AuthRepository {
     /**
      * 密码登录。
      *
-     * 走网关版 [ServiceLocator.gateway]（主域 `/leo-gateway/android/auth/password`）。
+     * **走直连版** [cn.apixiaoyuan.app.core.network.api.YtkApiService.passwordLogin]
+     * （账号域 `ape-api.yuanfudao.com` 的 `/accounts/android/safe/login`）。
      *
-     * @param phone    手机号（原版此接口用明文，未观察到客户端加密）
-     * @param password 密码（明文，原版就是明文 POST）
-     * @param yfdU     `YFD_U`。默认取设备指纹派生值。
-     *                 注意原版 `passwordLogin` 首参是 **`J`（非空）**，
-     *                 因此这里不再是可空 `Long?`。
+     * ## 为什么不走网关版
+     *
+     * 此前这里走 [ServiceLocator.gateway] 的
+     * `POST /leo-gateway/android/auth/password`。2026-09-25 对真机账号实测：
+     * 该接口无论密码传明文还是 RSA 密文，**一律 401 `unauthorized`**（无任何
+     * 语义化错误信息）；而直连版 + RSA 密文密码 → **HTTP 200**，返回完整
+     * `UserAccount` 并下发 `sess` / `userid` / `g_sess` / `persistent` 四个 cookie。
+     *
+     * 另一个佐证：明文密码打到直连版会得到 `401 {"message":"密码错误"}` ——
+     * 服务端确实在读 `password` 字段，只是要求密文。网关版连这个都拿不到。
+     *
+     * ## 密码必须 RSA 加密
+     *
+     * 原版 `YtkApiService.passwordLoginCall` 的注解层只写 `@Field`，看不出加密；
+     * 实测证明**必须**加密。加密复用 [PhoneEncoder] —— 它复刻的是
+     * `Lkv/k` 的 `ENCRYPT_MODE` 分支（RSA/ECB/PKCS1PADDING + 硬编码公钥 + Base64），
+     * 与手机号用的是同一把公钥、同一条链路（原版 `a()` 加密 / `b()` 解密）。
+     *
+     * 手机号本身**实测明文可用**，不加密 —— 与短信登录链路里 phone 也传密文
+     * 的做法不同，不要想当然统一。
+     *
+     * @param phone    手机号（明文）
+     * @param password 密码（明文入参，内部 RSA 加密后提交）
+     * @param yfdU     `YFD_U`，默认取设备指纹派生值
      */
     suspend fun loginByPassword(
         phone: String,
         password: String,
         yfdU: Long = DeviceFingerprint.yfdU(),
-    ): LoginOutcome = runLogin {
-        ServiceLocator.gateway.passwordLogin(
+    ): LoginOutcome = runCatching {
+        ServiceLocator.ytkApi.passwordLogin(
             yfdU = yfdU,
             phone = phone,
-            password = password,
+            password = PhoneEncoder.encode(password),
         )
-    }
+    }.fold(
+        onSuccess = { account ->
+            // 直连版返回 UserAccount（平铺账号对象，无业务码信封），
+            // 与 [loginBySms] 同构，兜底逻辑也一致。
+            runCatching {
+                val uid = account.id.takeIf { it != 0 } ?: account.primarySubUserId
+                if (uid != 0 && SessionStore.yfdU == null) SessionStore.saveYfdU(uid.toLong())
+            }
+            // 子账号 ID 列表只能在登录响应里截 —— 服务端没有单独的列表接口，
+            // 只有 batchGet 批量换资料。key "6" 是小猿口算所属业务线。
+            runCatching {
+                val ids = account.subUserInfos?.project2SubUserInfo?.get(PROJECT_KEY)?.subUserIds
+                if (!ids.isNullOrEmpty()) SessionStore.saveSubUserIds(ids)
+            }
+            LoginOutcome.Success(user = null)
+        },
+        onFailure = { e -> mapLoginError(e) },
+    )
+
+    /** 小猿口算在 `subUserInfos` 里的业务线 key。 */
+    private const val PROJECT_KEY = "6"
 
     /**
      * 短信验证码登录。
@@ -112,6 +152,10 @@ object AuthRepository {
             runCatching {
                 val uid = account.id.takeIf { it != 0 } ?: account.primarySubUserId
                 if (uid != 0 && SessionStore.yfdU == null) SessionStore.saveYfdU(uid.toLong())
+            }
+            runCatching {
+                val ids = account.subUserInfos?.project2SubUserInfo?.get(PROJECT_KEY)?.subUserIds
+                if (!ids.isNullOrEmpty()) SessionStore.saveSubUserIds(ids)
             }
             LoginOutcome.Success(user = null)
         },

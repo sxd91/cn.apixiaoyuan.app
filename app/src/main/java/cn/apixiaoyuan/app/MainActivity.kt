@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import cn.apixiaoyuan.app.core.design.component.LocalBottomBarInset
 import cn.apixiaoyuan.app.core.design.glass.LiquidGlassTabBar
 import cn.apixiaoyuan.app.core.design.glass.TabItem
 import cn.apixiaoyuan.app.core.design.theme.ReverseOldGuyTheme
@@ -107,36 +109,60 @@ private fun AppShell() {
         )
 
     Box(Modifier.fillMaxSize()) {
-        AppNavHost(
-            navController = navController,
-            modifier = Modifier
-                .fillMaxSize()
-                .layerBackdrop(backdrop),
-        )
-
-        // 底栏随二级页的出现/消失淡入淡出，而不是硬切 ——
-        // 硬切会让玻璃层在一帧内突然消失，视觉上像闪烁。
-        AnimatedVisibility(
-            visible = showTabBar,
-            enter = fadeIn(tween(durationMillis = 180)),
-            exit = fadeOut(tween(durationMillis = 180)),
-            modifier = Modifier.align(Alignment.BottomCenter),
+        // 底栏占位：只在底栏真的显示时给内容区留出高度（56dp 底栏 + 12dp 呼吸 + 手势条）。
+        // 二级页时底栏淡出，这里回落到 0.dp，页面即可滚到屏幕最底 ——
+        // 这正是用户要的「有底栏时限位上移，和「老挂戏老叟」一样」。
+        //
+        // 用 CompositionLocal 而不是给每个页面加参数：占位高度是「当前是否在 Tab 根页」
+        // 的函数，页面自己不该知道这件事；`AppScaffold` 统一读它。
+        CompositionLocalProvider(
+            LocalBottomBarInset provides if (showTabBar) {
+                TAB_BAR_HEIGHT + barBottomPadding
+            } else {
+                0.dp
+            },
         ) {
-            LiquidGlassTabBar(
-                items = tabs,
-                selectedIndex = selected,
-                onSelect = { index ->
-                    if (index != selected) {
-                        selected = index
-                        navController.navigate(destinations[index]) {
-                            popUpTo(RouteHome) { inclusive = false }
-                            launchSingleTop = true
-                        }
-                    }
-                },
-                backdrop = backdrop,
-                modifier = Modifier.padding(bottom = barBottomPadding),
-            )
+            Box(Modifier.fillMaxSize()) {
+                AppNavHost(
+                    navController = navController,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .layerBackdrop(backdrop),
+                )
+
+                // 底栏随二级页的出现/消失淡入淡出，而不是硬切 ——
+                // 硬切会让玻璃层在一帧内突然消失，视觉上像闪烁。
+                AnimatedVisibility(
+                    visible = showTabBar,
+                    enter = fadeIn(tween(durationMillis = 180)),
+                    exit = fadeOut(tween(durationMillis = 180)),
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                ) {
+                    LiquidGlassTabBar(
+                        items = tabs,
+                        selectedIndex = selected,
+                        onSelect = { index ->
+                            if (index != selected) {
+                                selected = index
+                                navController.navigate(destinations[index]) {
+                                    popUpTo(RouteHome) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
+                        backdrop = backdrop,
+                        modifier = Modifier.padding(bottom = barBottomPadding),
+                    )
+                }
+            }
         }
     }
 }
+
+/**
+ * 悬浮底栏的视觉高度（与 `LiquidGlassTabBar` 内部胶囊的 `.height(56.dp)` 一致）。
+ *
+ * 单独提出来是因为它现在有两个消费方：底栏自己，以及 [LocalBottomBarInset]
+ * 的计算。硬编码两处迟早会漂移。
+ */
+private val TAB_BAR_HEIGHT = 56.dp

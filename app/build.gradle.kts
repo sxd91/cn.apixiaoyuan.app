@@ -116,6 +116,9 @@ dependencies {
     // miuix-ui：MiuixTheme + ThemeController（莫奈取色）+ SmallTopAppBar 等基础组件。
     // 用于主题根切换与顶部渐变模糊顶栏；悬浮底栏仍走 miuix-blur，不受影响。
     implementation(libs.miuix.ui)
+    // miuix-icons：扩展图标库（含 Back / ChevronBackward 等），
+    // 用于把顶栏返回键换成 miuix 规范的矢量图标，替代 material-icons 的细箭头。
+    implementation(libs.miuix.icons)
 
     // --- MaterialSymbols 图标库 ---
     // 只引 outlined：filled 变体本地缓存无该产物、包结构未经解包验证，

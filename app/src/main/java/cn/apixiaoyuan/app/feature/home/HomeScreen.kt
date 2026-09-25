@@ -34,6 +34,7 @@ import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.App
 import cn.apixiaoyuan.app.core.design.component.AppScaffold
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
+import cn.apixiaoyuan.app.core.navigation.RouteAccount
 import cn.apixiaoyuan.app.core.navigation.RouteExercise
 import cn.apixiaoyuan.app.core.navigation.RouteLogin
 import cn.apixiaoyuan.app.core.navigation.RoutePk
@@ -80,7 +81,7 @@ fun HomeScreen(navController: NavHostController) {
             )
 
             PaletteCard()
-            SessionCard()
+            SessionCard(onClick = { navController.navigate(RouteAccount) })
 
             Text(
                 text = "快捷入口",
@@ -205,22 +206,29 @@ private fun seedHex(color: Color): String {
 }
 
 /**
- * 登录态卡。
+ * 登录态卡（用户卡片）。
  *
  * 读 [SessionStore]：`isLoggedIn` 与 `yfdU`（即 cookie 里的 `userid`，
  * 等于 `UserVO.userId`）。这两项是 R2 闭环的直接产物 —— cookie 承载登录态，
  * 这里把它的存在状态显式展示出来，避免「登录成功了但界面看不出来」。
  *
  * `yfdU` 为 null 或 -1 都按未登录处理（[SessionStore.isLoggedIn] 已封装）。
+ *
+ * **整卡可点**，跳账号页（宝贝学习账号切换 + 改密码）—— 用户明确要求
+ * 「账号切换等功能的下级页面点击主页的用户卡片即可进入」。右侧的 `›`
+ * 是「可进入」的视觉提示，与设置页的 [cn.apixiaoyuan.app.feature.settings.SettingsScreen]
+ * 同款语义。
  */
 @Composable
-private fun SessionCard() {
+private fun SessionCard(onClick: () -> Unit) {
     val loggedIn = SessionStore.isLoggedIn
     val yfdU = SessionStore.yfdU
     val cookieCount = SessionStore.loadCookies().size
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -252,7 +260,10 @@ private fun SessionCard() {
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = if (loggedIn) "已登录" else "未登录",
                     style = MaterialTheme.typography.titleSmall,
@@ -261,11 +272,18 @@ private fun SessionCard() {
                 )
                 Text(
                     text = if (loggedIn) "YFD_U $yfdU · cookie $cookieCount 条"
-                    else "点击「登录」进入账号页",
+                    else "点击进入账号页登录",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
+            Icon(
+                imageVector = AppIcons.ChevronForward,
+                contentDescription = "进入账号页",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

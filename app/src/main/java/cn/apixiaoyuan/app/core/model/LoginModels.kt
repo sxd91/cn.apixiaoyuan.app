@@ -122,4 +122,33 @@ data class UserAccount(
     @SerialName("passwordExist") val passwordExist: Boolean = false,
     @SerialName("createdTime") val createdTime: Long = 0L,
     @SerialName("loginIntercept") val loginIntercept: Boolean = false,
+    /**
+     * 子账号（宝贝学习账号）归属信息。
+     *
+     * 实测响应（2026-09-25）：
+     * ```json
+     * {"project2SubUserInfo":{"6":{"projectId":6,
+     *   "primarySubUserId":511467407,
+     *   "subUserIds":[511467407,1066052990,1151665130]}}}
+     * ```
+     *
+     * `subUserIds` 的**第一个元素是主账号自己**，其余才是子账号 —— 这是
+     * 「切换宝贝学习账号」列表的唯一数据源（服务端没有单独的列表接口，
+     * 只有 `batchGet` 批量换资料）。key `"6"` 是小猿口算所属业务线。
+     */
+    @SerialName("subUserInfos") val subUserInfos: SubUserInfos? = null,
+)
+
+/** `UserAccount.subUserInfos` 的载荷。 */
+@Serializable
+data class SubUserInfos(
+    @SerialName("project2SubUserInfo") val project2SubUserInfo: Map<String, ProjectSubUserInfo> = emptyMap(),
+)
+
+/** 单条业务线的子账号归属。 */
+@Serializable
+data class ProjectSubUserInfo(
+    @SerialName("projectId") val projectId: Int = 0,
+    @SerialName("primarySubUserId") val primarySubUserId: Int = 0,
+    @SerialName("subUserIds") val subUserIds: List<Int> = emptyList(),
 )

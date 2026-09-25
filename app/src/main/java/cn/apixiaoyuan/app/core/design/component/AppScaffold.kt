@@ -9,11 +9,15 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -27,6 +31,23 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+/**
+ * 悬浮底栏占位高度。
+ *
+ * 由 `MainActivity.AppShell` 提供：底栏**显示时**为「底栏高 + 12dp 呼吸 + 手势条」，
+ * 二级页（底栏淡出）时为 `0.dp`。`AppScaffold` 读它并加到内容区底部留白上。
+ *
+ * ## 为什么需要它
+ *
+ * 底栏是**浮层**（不占布局空间），所以内容能滑到底部被它遮住 —— 这是玻璃透明感
+ * 成立的前提，也是刻意设计。但**只在底栏真的存在时**成立：二级页没有底栏，
+ * 再留 96dp 就是纯浪费，滚动到底会停在一大片空白上。
+ *
+ * 用 CompositionLocal 而不是给每个页面加参数：页面不该知道「当前是不是 Tab 根页」，
+ * 那是导航层的事实。这样所有页面（现有的与以后新增的）都自动拿到正确留白。
+ */
+val LocalBottomBarInset = staticCompositionLocalOf { androidx.compose.ui.unit.Dp.Unspecified }
 
 /**
  * 全应用统一页面骨架。
@@ -83,8 +104,12 @@ fun AppScaffold(
         },
     ) { innerPadding ->
         // innerPadding 已含顶栏高度（顶栏自带 statusBars）与 navigationBars（底部手势条）。
-        // 不额外加底栏占位 —— 悬浮玻璃底栏浮在内容之上。
-        val bottom = innerPadding.calculateBottomPadding() + bottomInset
+        // 底栏是浮层，不占布局空间；但**底栏存在时**必须给它留出高度，
+        // 否则内容滚到底会停在底栏后面（二级页则相反，需要滚到屏幕最底）。
+        // 这个值由 AppShell 通过 LocalBottomBarInset 给出，这里直接消费。
+        val barInset = LocalBottomBarInset.current
+        val barExtra = if (barInset.isSpecified) barInset else 0.dp
+        val bottom = innerPadding.calculateBottomPadding() + bottomInset + barExtra
         Box(
             Modifier
                 .fillMaxSize()
@@ -151,7 +176,7 @@ private fun BlurredTopBar(
                 if (onBack != null) {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = AppIcons.forKey("Back"),
+                            imageVector = AppIcons.Back,
                             contentDescription = "返回",
                         )
                     }

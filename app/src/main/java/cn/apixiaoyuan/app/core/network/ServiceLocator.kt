@@ -10,6 +10,7 @@ import cn.apixiaoyuan.app.core.network.api.LeoProfileApiService
 import cn.apixiaoyuan.app.core.network.api.LeoShareApiService
 import cn.apixiaoyuan.app.core.network.api.LeoUserApiService
 import cn.apixiaoyuan.app.core.network.api.ShepherdApiService
+import cn.apixiaoyuan.app.core.network.api.SubAccountApiService
 import cn.apixiaoyuan.app.core.network.api.YtkApiService
 import cn.apixiaoyuan.app.core.network.api.YtkUserCenterApiService
 
@@ -81,5 +82,17 @@ object ServiceLocator {
 
     val ytkUserCenter: YtkUserCenterApiService by lazy {
         RetrofitFactory.ytk(YtkUserCenterApiService::class.java)
+    }
+
+    /**
+     * 子账号（「切换宝贝学习账号」）。
+     *
+     * **注意**：这个接口同时挂两套域名 —— `batchGet` / `switch` 走主域，
+     * `registerSonSubUser` / `deregisterSubUser` / `subDeregister` 走账号域。
+     * 靠方法上的 `@BaseUrl` 注解分流，所以实例从哪套 Retrofit 建都行
+     * （这里用主域，因为两个主域方法更常被调用）。
+     */
+    val subAccount: SubAccountApiService by lazy {
+        RetrofitFactory.leo(SubAccountApiService::class.java)
     }
 }

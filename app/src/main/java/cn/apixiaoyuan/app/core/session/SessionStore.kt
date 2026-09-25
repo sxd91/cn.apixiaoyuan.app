@@ -32,6 +32,7 @@ object SessionStore {
     private const val PREF_NAME = "leo_session"
     private const val KEY_COOKIES = "cookieJsonListKey"
     private const val KEY_YFD_U = "yfd_u"
+    private const val KEY_SUB_USER_IDS = "sub_user_ids"
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -81,6 +82,26 @@ object SessionStore {
      */
     fun saveYfdU(value: Long) {
         prefs().edit().putLong(KEY_YFD_U, value).apply()
+    }
+
+    /**
+     * 保存子账号（宝贝学习账号）ID 列表。
+     *
+     * 数据源是登录响应 `UserAccount.subUserInfos.project2SubUserInfo["6"].subUserIds` ——
+     * 服务端**没有**单独的「我的子账号列表」接口，只有 `batchGet` 批量换资料，
+     * 所以 ID 列表必须在登录时截下来。
+     *
+     * **列表第一个元素是主账号自己**，调用方负责区分（见
+     * [cn.apixiaoyuan.app.core.account.AccountRepository.fetchSubAccounts]）。
+     */
+    fun saveSubUserIds(ids: List<Int>) {
+        prefs().edit().putString(KEY_SUB_USER_IDS, ids.joinToString(",")).apply()
+    }
+
+    /** 读子账号 ID 列表。未登录 / 单账号用户返回空表。 */
+    fun subUserIds(): List<Int> {
+        val raw = prefs().getString(KEY_SUB_USER_IDS, null) ?: return emptyList()
+        return raw.split(',').mapNotNull { it.trim().toIntOrNull() }
     }
 
     /** 读出全部 cookie；无会话时返回空表。 */

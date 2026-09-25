@@ -60,6 +60,47 @@ interface YtkApiService {
     ): UserAccount
 
     /**
+     * 密码登录（直连版，**实测可用**）。
+     *
+     * POST `/accounts/android/safe/login`，返回 [UserAccount]。
+     *
+     * ## 为什么是这条而不是 [LeoGatewayService.passwordLogin]
+     *
+     * 2026-09-25 对真机账号实测：
+     *  - 主域网关版 `POST /leo-gateway/android/auth/password`（`@Field` phone/password）
+     *    无论密码是明文还是 RSA 密文，**一律 401 `unauthorized`**；
+     *  - 本直连版 `POST /accounts/android/safe/login` + **RSA 加密的 password** →
+     *    **HTTP 200**，返回完整 `UserAccount`（`id` / `primarySubUserId` / `subUserInfos` …），
+     *    并下发 `sess` / `userid` / `g_sess` / `persistent` 四个 cookie。
+     *
+     * 且明文 password 打到本接口会得到**语义明确的** `401 {"message":"密码错误"}`
+     * —— 说明服务端确实在读 `password` 字段，只是要求密文。
+     *
+     * ## 加密口径（与手机号同一把公钥）
+     *
+     * `Lkv/k;->b(String)` 的 `ENCRYPT_MODE` 分支：RSA/ECB/PKCS1PADDING + 硬编码公钥 +
+     * Base64。本项目 [cn.apixiaoyuan.app.core.auth.PhoneEncoder] 就是这条链路的复刻
+     * （`a()` 是加密、`b()` 是解密），所以**直接复用**，不另建类。
+     *
+     * 原版 `YtkApiService.passwordLoginCall` 的注解层同样只写 `@Field`，
+     * 看不出加密 —— 与 [smsLogin] 一样，**调用点/实测才是事实**。
+     *
+     * @param yfdU     `@Query("YFD_U")` —— 设备指纹派生值
+     * @param phone    `@Field("phone")` —— 明文（实测明文可用）
+     * @param password `@Field("password")` —— **RSA 密文**
+     */
+    @BaseUrl(BASE_YTK)
+    @CheckNothing
+    @GsonConverter
+    @FormUrlEncoded
+    @POST("/accounts/android/safe/login")
+    suspend fun passwordLogin(
+        @Query("YFD_U") yfdU: Long,
+        @Field("phone") phone: String,
+        @Field("password") password: String,
+    ): UserAccount
+
+    /**
      * 短信验证码发送（`/verifier/android/sms`）。
      *
      * @param yfdU 设备指纹派生值（原版 `Lds/i3` 指纹串经 MD5 取前 8 字节大端拼 long）。

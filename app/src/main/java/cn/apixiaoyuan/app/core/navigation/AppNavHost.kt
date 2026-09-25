@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import cn.apixiaoyuan.app.core.design.theme.PageTransitionPrefs
+import cn.apixiaoyuan.app.feature.account.AccountScreen
 import cn.apixiaoyuan.app.feature.api.ApiScreen
 import cn.apixiaoyuan.app.feature.exercise.ExamScreen
 import cn.apixiaoyuan.app.feature.exercise.ExerciseScreen
@@ -82,6 +83,15 @@ object RouteOldSimian
 @Serializable
 object RouteScorePump
 
+/**
+ * 账号页路由（宝贝学习账号切换 + 改密码）。
+ *
+ * 从首页的用户卡片进入 —— 用户明确要求「账号切换等功能的下级页面点击主页的
+ * 用户卡片即可进入」。
+ */
+@Serializable
+object RouteAccount
+
 
 /**
  * 全应用导航图。
@@ -138,5 +148,6 @@ fun AppNavHost(
         composable<RouteSettings> { SettingsScreen(navController) }
         composable<RouteOldSimian> { OldSimianScreen(navController) }
         composable<RouteScorePump> { ScorePumpScreen(navController) }
+        composable<RouteAccount> { AccountScreen(navController) }
     }
 }
