@@ -98,8 +98,21 @@ object AuthRepository {
         )
     }.fold(
         onSuccess = { account ->
-            // 直连版返回 UserAccount（无业务码信封），非空即成功。
-            // 登录态由 Set-Cookie 承载，PersistentCookieJar 已自动落盘。
+            // 直连版返回 UserAccount（**平铺账号对象，无业务码信封**）：
+            // 实测成功响应就是 `{"id":...,"phone":...,"primarySubUserId":...}`，
+            // 没有 code/body 包装。服务端失败时给非 2xx（Retrofit 抛
+            // HttpException，走下面的 onFailure），所以能解析到 body 即成功。
+            //
+            // 登录态由 Set-Cookie 承载（sess / userid / g_sess / persistent），
+            // PersistentCookieJar 已自动落盘，此处不重复保存 cookie。
+            //
+            // 兜底：若响应未带 Set-Cookie（或落盘环节异常），用响应体里的
+            // 账号 ID 直接写 YFD_U —— 它同时是 SessionStore.isLoggedIn 的判据，
+            // 避免「解析成功但首页仍显示未登录」。
+            runCatching {
+                val uid = account.id.takeIf { it != 0 } ?: account.primarySubUserId
+                if (uid != 0 && SessionStore.yfdU == null) SessionStore.saveYfdU(uid.toLong())
+            }
             LoginOutcome.Success(user = null)
         },
         onFailure = { e -> mapLoginError(e) },

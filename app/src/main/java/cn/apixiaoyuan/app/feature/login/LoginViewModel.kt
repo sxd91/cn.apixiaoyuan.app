@@ -43,8 +43,25 @@ class LoginViewModel : ViewModel() {
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
-    /** 成功后的用户资料，非 null 即登录完成，UI 据此触发返回上一页。 */
+    /**
+     * 成功后的用户资料。**可能为 null。**
+     *
+     * 直连版短信登录（`/accounts/android/safe/login`）的响应体是平铺账号
+     * 对象、不含 `leoUserInfo`，因此它成功时这里仍是 null。
+     * 判断「是否登录完成」请用 [loggedIn]，不要用本字段。
+     */
     var loggedInUser by mutableStateOf<UserVO?>(null)
+        private set
+
+    /**
+     * 是否已完成登录。UI 据此触发返回上一页。
+     *
+     * 与 [loggedInUser] 分开的原因：**登录完成 ≠ 拿到了用户资料**。
+     * 网关版（`/leo-gateway/android/auth/{sms,password}`）成功时带回 `leoUserInfo`，
+     * 直连版成功时没有。早先直接拿 `loggedInUser != null` 当跳转判据，
+     * 会让直连版短信登录「请求成功、无报错、但页面不跳转」，卡在登录页。
+     */
+    var loggedIn by mutableStateOf(false)
         private set
 
     /** 发码倒计时剩余秒数。0 表示可以发码。 */
@@ -120,7 +137,13 @@ class LoginViewModel : ViewModel() {
 
     private fun handleOutcome(outcome: LoginOutcome) {
         when (outcome) {
-            is LoginOutcome.Success -> loggedInUser = outcome.user
+            // 两个字段必须同时置位：loggedIn 是「登录完成」的唯一判据（UI 跳转用），
+            // loggedInUser 只是「顺带拿到的用户资料」，直连版短信登录时为 null。
+            // 只置 loggedInUser 会导致直连版成功却永不跳转。
+            is LoginOutcome.Success -> {
+                loggedInUser = outcome.user
+                loggedIn = true
+            }
             LoginOutcome.NeedAuth -> errorMessage = "该账号需短信二次验证，请改用验证码登录"
             LoginOutcome.Banned -> errorMessage = "账号已被封禁"
             LoginOutcome.PhoneNotMatch -> errorMessage = "手机号与账号不匹配"

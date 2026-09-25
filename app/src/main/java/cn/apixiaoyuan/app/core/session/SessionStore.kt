@@ -72,6 +72,17 @@ object SessionStore {
         }
     }
 
+    /**
+     * 单独写入 `YFD_U`（登录态兜底）。
+     *
+     * 正常路径下 `userid` cookie 由 [saveCookies] 一并写入；本方法供
+     * 直连版登录在「响应体解析成功、但响应未带 Set-Cookie」时兜底，
+     * 避免解析成功却被判为未登录。
+     */
+    fun saveYfdU(value: Long) {
+        prefs().edit().putLong(KEY_YFD_U, value).apply()
+    }
+
     /** 读出全部 cookie；无会话时返回空表。 */
     fun loadCookies(): List<CookieEntry> {
         val raw = prefs().getString(KEY_COOKIES, null) ?: return emptyList()
@@ -92,9 +103,25 @@ object SessionStore {
             return if (v == -1L) cookie("userid")?.toLongOrNull() else v
         }
 
-    /** 是否已登录：`sid` 与 `userid` 同时存在。 */
+    /**
+     * 是否已登录：`userid` cookie 存在即视为已登录。
+     *
+     * ## 判定口径为什么不是 `sid`
+     *
+     * 2026-09-25 实测：直连版 `POST /accounts/android/safe/login`
+     * 成功时下发的是 `sess` / `userid` / `g_sess` / `__sub_user_infos__`
+     * / `g_loc` / `persistent`，**从不含 `sid`**。
+     *
+     * `sid` 出现在真机原版（走运营商一键登录等其它通道）的 cookie 表里，
+     * 与本项目走的短信直连通道不是同一条。早先按真机 cookie 表把 `sid`
+     * 写成必要条件，会让「直连版登录成功」被判为未登录 —— 登录页跳转后
+     * 首页登录态卡仍显示未登录。
+     *
+     * 取 `userid` 作唯一判据的原因：它同时是 [yfdU] 的取值来源，
+     * 也就是本项目后续所有鉴权请求真正依赖的那个值。它存在即有登录态。
+     */
     val isLoggedIn: Boolean
-        get() = cookie("sid") != null && cookie("userid") != null
+        get() = cookie("userid") != null
 
     /** 清空登录态（登出）。 */
     fun clear() {

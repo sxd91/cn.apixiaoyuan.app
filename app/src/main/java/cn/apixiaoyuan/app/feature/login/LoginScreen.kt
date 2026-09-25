@@ -43,9 +43,14 @@ import cn.apixiaoyuan.app.core.design.component.AppScaffold
  *  - 短信登录：AuthRepository.loginBySms
  *  - 发验证码：AuthRepository.sendSmsCode
  *
- * 登录成功的副作用由 [LaunchedEffect] 监听 [LoginViewModel.loggedInUser]：
- * 一旦非空立即 popBackStack —— cookie 已由 PersistentCookieJar 落盘，
+ * 登录成功的副作用由 [LaunchedEffect] 监听 [LoginViewModel.loggedIn]：
+ * 一旦为 true 立即 popBackStack —— cookie 已由 PersistentCookieJar 落盘，
  * 返回上一页后所有请求自动带登录态，无需额外传递。
+ *
+ * 判据必须是 [LoginViewModel.loggedIn] 而非 [LoginViewModel.loggedInUser]：
+ * 直连版短信登录（`/accounts/android/safe/login`）成功时响应体不含
+ * `leoUserInfo`，`loggedInUser` 仍为 null，用它当判据会导致「登录成功但
+ * 页面不跳转」。
  *
  * 顶栏与返回键由 [AppScaffold] 统一提供，statusBars 留白由它负责；
  * 悬浮玻璃底栏是浮层，内容不再为它预留 96dp。
@@ -55,8 +60,8 @@ fun LoginScreen(
     navController: NavHostController,
     viewModel: LoginViewModel = viewModel(),
 ) {
-    LaunchedEffect(viewModel.loggedInUser) {
-        if (viewModel.loggedInUser != null) {
+    LaunchedEffect(viewModel.loggedIn) {
+        if (viewModel.loggedIn) {
             navController.popBackStack()
         }
     }
