@@ -43,6 +43,29 @@ data class LeoTaskItem(
  * （`currentExp` / `currentLevel` / `nextLevelExp`）推断字段，**已证伪**：
  * 那是本地缓存键，与本接口响应不同源。刷分需要读 [curWeekScore]，
  * 字段名不匹配会直接拿到 0，因此这里按原版逐字对齐。
+ *
+ * ## 2026-09-25 实测响应（真机账号，主域认证打通后）
+ *
+ * 请求 `GET /leo-star/android/exercise/rank/pre-fetch` → **HTTP 200**：
+ * ```json
+ * {"ver":"1.0","status":200,"message":"","data":{
+ *   "curRank":0,"curWeekScore":0,
+ *   "expectedMultiple":{"multiple":1,"continuousCheckInCount":1},
+ *   "multiInfoList":null,"rankVersion":0,
+ *   "preExerciseContext":{...}}}
+ * ```
+ *
+ * 三点实证：
+ *  1. **响应有信封** —— 真实结构是 `{ver, status, message, data}`，
+ *     业务字段在 `data` 里，不是平铺。本类（以及 `GsonConverter` 链路）
+ *     直接反序列化 `data` 的内容，因此这里不建信封类；
+ *  2. [expectedMultiple] 实测比原版 smali 多一个
+ *     `continuousCheckInCount` 字段，本类已有默认值能接住，不报错；
+ *  3. [multiInfoList] 实测可为 **null**（不是空数组）—— 本类声明为
+ *     非空 `List` 带默认值 `emptyList()`，kotlinx 的
+ *     `coerceInputValues = true` 会把显式 null 转成默认值，安全。
+ *
+ * [curWeekScore] 实测为 0（新账号 / 当周未练习），字段名已确证。
  */
 @Serializable
 data class LeoUserCurrentExpData(
@@ -55,11 +78,18 @@ data class LeoUserCurrentExpData(
 /**
  * 期望倍率（原版 `LeoExpectedMultipleData`）。
  *
- * 该类只有一个 `private final multiple:I` 字段，构造签名 `(I)V`。
+ * 原版 smali 里该类只有一个 `private final multiple:I` 字段（构造签名 `(I)V`）。
+ *
+ * **2026-09-25 实测发现服务端多下发了一个字段** ——
+ * `{"multiple":1,"continuousCheckInCount":1}`。原版能忽略它（Gson 宽松），
+ * 本项目也补上以免依赖 `ignoreUnknownKeys`（那是全局兜底，
+ * 显式声明更清楚，也便于后续用这个值）。
  */
 @Serializable
 data class LeoExpectedMultipleData(
     @SerialName("multiple") val multiple: Int = 0,
+    /** 连续打卡天数。原版 smali 未声明，服务端实测下发。 */
+    @SerialName("continuousCheckInCount") val continuousCheckInCount: Int = 0,
 )
 
 /**

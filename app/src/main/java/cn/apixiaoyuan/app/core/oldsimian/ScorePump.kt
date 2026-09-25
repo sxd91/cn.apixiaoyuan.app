@@ -56,6 +56,27 @@ import kotlin.random.Random
  *
  * 分数由服务端按**实际上传的练习记录**累计，客户端只能多刷几局逼近目标，
  * 不存在「直接改分数」的接口 —— 这一点在 UI 上必须如实告知用户。
+ *
+ * ## ⚠️ 已知阻塞：`solar-encoder` 417（2026-09-25 实测）
+ *
+ * 本文件写完后，对真机账号实测发现：
+ *
+ *  - **分数读取可用**：`GET /leo-star/android/exercise/rank/pre-fetch`
+ *    在「设备链 + 登录 cookie」两层齐备时返回 **200 + 真实数据** ——
+ *    所以 [fetchCurrentScore] 这条路是通的；
+ *  - **取卷与上传不可用**：`POST /leo-math/android/exams`（取卷）与
+ *    `PUT /leo-math/android/exams/v2/{examId}`（上传）都返回
+ *    **417**，响应头带 **`x-block-by: solar-encoder`**。
+ *
+ * `solar-encoder` 是**服务端编码中间件**的标识，不是认证问题
+ * （认证已过；同域下 pre-fetch 就是 200）。它要求请求体/参数经过
+ * 原版 native 编码链路（`libRequestEncoder.so` / `libContentEncoder.so`）
+ * 处理，而该链路的**完整口径尚未复刻** —— 已知 `@NeedEncode` 走的是
+ * gzip → `libContentEncoder.so` 的 `c(byte[])`（本项目已实现），
+ * 但实测仍被拦，说明还有缺的环节（可能是额外的请求头或另一层编码）。
+ *
+ * 结论：**刷分链路目前跑不通，卡在 417**。代码逻辑本身已按算法写好，
+ * 等编码口径补齐后即可工作。不假装可用。
  */
 object ScorePump {
 
