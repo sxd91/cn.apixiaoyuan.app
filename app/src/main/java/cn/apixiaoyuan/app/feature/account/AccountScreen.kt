@@ -132,18 +132,41 @@ fun AccountScreen(
             deleteTarget?.let { target ->
                 SectionCard(title = "删除「${target.nickname}」") {
                     Text(
-                        text = "删除子账号需要短信验证码（服务端要求）。此操作不可撤销。",
+                        text = "删除子账号需要短信验证码（服务端要求，且验证码须 RSA 加密后提交）。" +
+                            "此操作不可撤销。",
                         color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
                     )
+                    // 手机号：删除接口需要它来发码，与改密码共用同一个字段。
                     TextField(
-                        value = deleteCode,
-                        onValueChange = { deleteCode = it.filter(Char::isDigit).take(6) },
+                        value = viewModel.phone,
+                        onValueChange = { viewModel.phone = it.filter(Char::isDigit).take(11) },
                         modifier = Modifier.fillMaxWidth(),
-                        label = "短信验证码",
+                        label = "手机号（用于接收验证码）",
                         useLabelAsPlaceholder = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextField(
+                            value = deleteCode,
+                            onValueChange = { deleteCode = it.filter(Char::isDigit).take(6) },
+                            modifier = Modifier.weight(1f),
+                            label = "短信验证码",
+                            useLabelAsPlaceholder = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                        )
+                        Button(
+                            onClick = { viewModel.sendDeleteSmsCode() },
+                            enabled = viewModel.phone.length == 11 && viewModel.countdown == 0,
+                        ) {
+                            Text(if (viewModel.countdown > 0) "${viewModel.countdown}s" else "获取验证码")
+                        }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),

@@ -1,5 +1,6 @@
 package cn.apixiaoyuan.app.core.account
 
+import cn.apixiaoyuan.app.core.auth.AuthRepository
 import cn.apixiaoyuan.app.core.auth.DeviceFingerprint
 import cn.apixiaoyuan.app.core.auth.PhoneEncoder
 import cn.apixiaoyuan.app.core.model.LoginResponse
@@ -115,14 +116,32 @@ object AccountRepository {
     }
 
     /**
-     * 删除宝贝学习账号（通道 A，账号域直连版）。
+     * 删除宝贝学习账号（**通道 A**：账号域直连版，用户拍板选定）。
      *
-     * 需要短信验证码。字段名 `deregsiterSubUser` 是原版错拼，**不能纠正**
-     * （见 [cn.apixiaoyuan.app.core.network.api.SubAccountApiService] 的 KDoc）。
+     * POST `/accounts/android/directly/deregisterSubUser`。
      *
-     * @param subUserId    要删的子账号 ID
+     * ## 为什么选通道 A（2026-09-25 三条通道实测对比）
+     *
+     * | 通道 | 路径 / 域名 | 传参 | 实测结果 |
+     * |---|---|---|---|
+     * | **A** | `/accounts/android/directly/deregisterSubUser`（ape-api） | Field | **403 `Decrypt failed` → 加密后 500（链路通）** |
+     * | B | `/leo-gateway/android/accounts/directly/deregisterSubUser`（xyks） | Query | 401 `unauthorized` |
+     * | C | `/accounts/android/directly/subDeregister`（ape-api） | Query | 403 `Decrypt failed`（且路径已下线，404） |
+     *
+     * B 走主域 —— 而本项目**主域 cookie 实测一律 401**（`batchGet` 同样 401），
+     * 说明主域还要求本项目尚未复刻的额外头（原版 `HeaderInterceptor` 链路），
+     * 因此 B 不可用。C 在账号域但路径已下线（404 `No message available`）。
+     * **A 是唯一实测可用的通道**，且它在账号域，cookie 天然有效。
+     *
+     * ## `verification` 必须 RSA 加密
+     *
+     * 传明文会得到 403 `Decrypt failed, data =000000` —— 服务端**先解密再校验**。
+     * 这里用 [PhoneEncoder.encode]（与发短信/登录密码同一把公钥）加密后提交。
+     * 两个 ID 参数**不加密**（错误信息未指向它们）。
+     *
+     * @param subUserId     要删的子账号 ID
      * @param primaryUserId 主账号 ID
-     * @param verification  短信验证码
+     * @param verification  短信验证码（明文入参，内部 RSA 加密后提交）
      */
     suspend fun deleteSubAccount(
         subUserId: Int,
@@ -132,9 +151,19 @@ object AccountRepository {
         ServiceLocator.subAccount.deregisterSubUser(
             deregsiterSubUser = subUserId,
             targetPrimarySubUserId = primaryUserId,
-            verification = verification,
+            verification = PhoneEncoder.encode(verification),
         )
     }
+
+    /** 删除宝贝学习账号：发验证码。
+     *
+     * 复用与登录同一条发码链路（`/verifier/android/sms`，账号域）。
+     * 删除接口的 `verification` 要求 RSA 密文，但**发码接口的 phone 也要求密文**
+     * —— 两者都由 [cn.apixiaoyuan.app.core.auth.AuthRepository.sendSmsCode]
+     * 内部处理，这里不重复加密。
+     */
+    suspend fun sendDeleteSmsCode(phone: String): AuthRepository.SmsOutcome =
+        AuthRepository.sendSmsCode(phone)
 
     /**
      * 改密码。

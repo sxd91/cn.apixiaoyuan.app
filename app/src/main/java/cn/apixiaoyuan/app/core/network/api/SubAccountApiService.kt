@@ -75,10 +75,11 @@ interface SubAccountApiService {
     /**
      * 切换当前宝贝学习账号。
      *
-     * POST `/leo-gateway/android/accounts/switch`（主域）。
+     * POST `/leo-gateway/android/accounts/switch`（主域），`@FormUrlEncoded` +
+     * `@Field("targetUserId")` —— 注意是 **Field 不是 Query**。
      *
-     * `@FormUrlEncoded` + `@Field("targetUserId")` —— 注意是 **Field 不是 Query**，
-     * 写成 Query 服务端读不到会当成没传。
+     * 逐行来自 `smali_classes2/.../subaccount/api/LeoGatewayService.smali`：
+     * `switchSubAccount(I)`，返回 `LoginResponse`。
      */
     @BaseUrl(BASE_LEO)
     @CheckNothing
@@ -90,13 +91,50 @@ interface SubAccountApiService {
     ): LoginResponse
 
     /**
-     * 删除子账号（通道 A，账号域直连版）。
+     * 删除子账号（通道 B，主域网关版）。
      *
-     * POST `/accounts/android/directly/deregisterSubUser`。
+     * POST `/leo-gateway/android/accounts/directly/deregisterSubUser`。
+     *
+     * 逐行来自 `smali_classes2/.../subaccount/api/LeoGatewayService.smali` 的
+     * `directlyDeregisterSubAccount(J, J, String)`：
+     *  - 三个参数**全是 `@Query`**（不是 Field），前两个是 primitive `J`
+     *  - 返回 `LoginResponse`（带 `code` 信封）
+     *
+     * **与通道 A 的区别**：A 走账号域、Field 传参、返回裸 `UserAccount`；
+     * B 走主域、Query 传参、返回带业务码的 `LoginResponse`。
+     */
+    @BaseUrl(BASE_LEO)
+    @CheckNothing
+    @GsonConverter
+    @POST("/leo-gateway/android/accounts/directly/deregisterSubUser")
+    suspend fun directlyDeregisterSubAccount(
+        @Query("deregsiterSubUser") deregsiterSubUser: Long,
+        @Query("targetPrimarySubUserId") targetPrimarySubUserId: Long,
+        @Query("verification") verification: String,
+    ): LoginResponse
+
+    /**
+     * 删除子账号（通道 A，账号域直连版，**实测可用**）。
+     *
+     * POST `/accounts/android/directly/deregisterSubUser`（**账号域**）。
+     *
+     * 逐行来自 `smali_classes2/.../subaccount/api/YtkAccountsService.smali` 的
+     * `destorySubAccount(IILjava/lang/String;)`：三个参数都是 `@Field`，
+     * 前两个是 primitive `I`，返回裸 `UserAccount`。
+     *
+     * ## `verification` 必须 RSA 加密（2026-09-25 实测确证）
+     *
+     * 传明文验证码会得到 **403 `{"message":"Decrypt failed, data =000000"}`**
+     * —— 服务端在读 `verification` 时**先做 RSA 解密**，拿到明文才继续。
+     * 换成 `PhoneEncoder.encode(验证码)` 后该错误消失（变成 500，
+     * 因为测试用的是不存在的子账号 ID），**证明加密口径正确、链路打通**。
+     *
+     * 注意 `deregsiterSubUser` 与 `targetPrimarySubUserId` 两个 ID
+     * **不加密**（它们不是「Decrypt failed」指向的字段）。
      *
      * @param deregsiterSubUser       要删的子账号 ID。**字段名就是原版的错拼**。
      * @param targetPrimarySubUserId  主账号 ID
-     * @param verification            短信验证码
+     * @param verification            短信验证码，**调用方须传 RSA 密文**
      */
     @BaseUrl(BASE_YTK)
     @CheckNothing

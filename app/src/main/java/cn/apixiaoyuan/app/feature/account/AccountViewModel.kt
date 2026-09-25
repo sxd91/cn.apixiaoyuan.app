@@ -144,9 +144,34 @@ class AccountViewModel : ViewModel() {
             loading = false
             result.onSuccess {
                 message = "已删除「${item.nickname}」"
+                // 服务端已从 subUserIds 摘掉该账号，本地缓存要同步 ——
+                // 否则列表里还会残留一条（refresh 时 batchGet 已查不到它）。
+                SessionStore.saveSubUserIds(
+                    SessionStore.subUserIds().filterNot { it == item.userId },
+                )
                 refresh()
             }.onFailure {
                 message = "删除失败：${it.message ?: it}"
+            }
+        }
+    }
+
+    /**
+     * 删除流程的发码。
+     *
+     * 与改密码共用同一套发码链路（`/verifier/android/sms`），
+     * 但**独立的倒计时**：两处同时发码会被服务端频控，这里用同一个
+     * [countdown] 状态即可（同一时刻只可能有一个删除弹窗在开）。
+     */
+    fun sendDeleteSmsCode() {
+        if (countdown > 0 || phone.length != 11) return
+        viewModelScope.launch {
+            when (val outcome = AccountRepository.sendDeleteSmsCode(phone)) {
+                AuthRepository.SmsOutcome.Sent -> startCountdown()
+                is AuthRepository.SmsOutcome.Rejected ->
+                    message = outcome.serverMessage?.let { "发码被拒（${outcome.httpStatus}）：$it" }
+                        ?: "发码被拒（${outcome.httpStatus}）"
+                is AuthRepository.SmsOutcome.Failed -> message = "发码失败：${outcome.message}"
             }
         }
     }
