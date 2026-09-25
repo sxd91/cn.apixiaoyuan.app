@@ -76,12 +76,13 @@ fun PkH5Screen(
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                databaseEnabled = true
                 loadsImagesAutomatically = true
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                userAgentString = userAgentString + " ReverseOldGuy/1.0"
+                // UA 对齐原版 vgo 容器（取证：BaseWebApp 继承腾讯 X5 WebView，
+                // H5 侧按 UA 特征区分容器能力；自加的 ReverseOldGuy 标记可能被
+                // H5 风控当异常客户端，去掉）。
             }
-            
+
             // 同步登录态：把 SessionStore 的 cookie 写进 CookieManager。
             // 必须在 loadUrl 之前 —— WebView 用 CookieManager 发请求，
             // 不是用 OkHttp 的 PersistentCookieJar。
@@ -90,7 +91,7 @@ fun PkH5Screen(
             }
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             syncCookiesToWebView(viewModel.h5Url)
-            
+
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     viewModel.setProgress(5)
@@ -99,7 +100,7 @@ fun PkH5Screen(
                     // 不重置会导致「老挂戏老叟」脚本被叠加注入多轮。
                     view?.let { PkJsInjector.markPageStarted(it) }
                 }
-                
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     viewModel.setProgress(100)
                     view?.title?.takeIf { it.isNotBlank() }?.let { viewModel.webTitle = it }

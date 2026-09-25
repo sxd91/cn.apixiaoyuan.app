@@ -22,7 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 
 /**
  * 协议请求台。
@@ -33,13 +33,8 @@ import cn.apixiaoyuan.app.core.design.component.AppScaffold
  */
 @Composable
 fun ReplScreen(navController: NavHostController, viewModel: ReplViewModel = viewModel()) {
-    AppScaffold(title = "请求台", onBack = null) { pad: PaddingValues ->
+    AppScrollScaffold(title = "请求台", onBack = null) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad)
-                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.design.component.AppScaffold
+import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 
 /**
  * 接口浏览器。
@@ -95,13 +96,8 @@ private fun ApiListPane(viewModel: ApiViewModel) {
 /** 详情态：单个接口的完整定义 + 送进请求台。 */
 @Composable
 private fun ApiDetailPane(viewModel: ApiViewModel, endpoint: ApiRegistry.ApiEndpoint) {
-    AppScaffold(title = endpoint.name, onBack = { viewModel.back() }) { pad: PaddingValues ->
+    AppScrollScaffold(title = endpoint.name, onBack = { viewModel.back() }) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(pad)
-                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             TextButton(onClick = { viewModel.back() }) { Text("← 返回列表") }

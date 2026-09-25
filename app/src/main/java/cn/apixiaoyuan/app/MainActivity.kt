@@ -135,13 +135,10 @@ private fun AppShell() {
         )
 
     Box(Modifier.fillMaxSize()) {
-        // 滚动限位：只在底栏真的显示时给滚动容器追加高度（二级页时为 0）。
+        // 滚动限位常驻：底栏**永远悬浮存在**（不随二级页消失，见下方说明），
+        // 所以滚动限位也常驻 —— 与「底部 tab 上抬」同语义。
         CompositionLocalProvider(
-            LocalBottomBarInset provides if (showTabBar) {
-                TAB_BAR_HEIGHT + barBottomPadding
-            } else {
-                0.dp
-            },
+            LocalBottomBarInset provides TAB_BAR_HEIGHT + barBottomPadding,
         ) {
             Box(Modifier.fillMaxSize()) {
                 // 四个 Tab 根页放进 pager：切 Tab 是整屏水平平移，不走 NavHost 转场。
@@ -166,20 +163,21 @@ private fun AppShell() {
 
                 // ==================== 悬浮底栏 ====================
                 //
-                // 进入二级页时的行为（用户明确要求）：底栏**不是淡出消失**，
-                // 而是被二级页**盖住**，并跟随转场一起**向左平移 + 压暗** ——
-                // 视觉上它仍在，只是退到了下一层，返回时随页面一起回来。
+                // 用户要求（2026-09-25 定稿）：进入二级页与返回时，底栏**都不消失**，
+                // 始终渲染；二级页期间被页面盖住（z 序切换），返回时在原处出现。
                 //
-                // 三件事必须同时做到，缺一就变回「两层皮」：
-                //  1. **z 序下沉**：底栏原本浮在内容之上；二级页期间必须改到底下，
-                //     否则它会一直盖在二级页上面（那才是真正的 bug）。
-                //     用 zIndex 而不是移除/淡出 —— 移除就没有「被覆盖」的观感。
-                //  2. **同步位移 + 压暗**：与二级页转场同一时长（450ms）、同向
-                //     （被覆盖层向左 1/4），让底栏看起来是「被推走」的那层。
-                //  3. **不可点击**：被盖住后不该还能点（否则点到看不见的 Tab）。
-                //     用 `graphicsLayer` 之外再叠一个 consume 点击的拦截层不优雅，
-                //     这里靠 zIndex 下沉后二级页自然吃掉触摸即可 ——
-                //     二级页是不透明且 fillMaxSize 的，触摸不会穿透到底栏。
+                // 实现：底栏**永远参与组合与渲染**，只按 showTabBar 切 zIndex ——
+                //  - 根页：1f，浮在 pager 页面之上（悬浮玻璃的本来语义）；
+                //  - 二级页：-1f，沉到 NavHost 转场层之下，被不透明的二级页
+                //    （Scaffold containerColor=surfaceContainer）盖住。
+                // 相比 AnimatedVisibility 淡出：转场全程底栏都在画面里（被推走/
+                // 盖住的过程可见），返回时同帧回来，没有「消失又出现」的空洞。
+                //
+                // 转场期间（450ms）底栏做轻微视差平移 + 压暗（与 miuixExit 的
+                // 被覆盖层同向），让「沉下去」有过程感。
+                //
+                // 由此滚动限位（LocalBottomBarInset）也**常驻**：二级页同样是
+                // 全屏滚动页，内容同样该滚到玻璃上方为止 —— 与底部 tab 上抬同一语义。
                 val coveredProgress by animateFloatAsState(
                     targetValue = if (showTabBar) 0f else 1f,
                     animationSpec = tween(durationMillis = COVER_ANIM_MS),
@@ -189,9 +187,7 @@ private fun AppShell() {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        // (1) z 序：根页时浮在上层（1f），被覆盖时沉到下层（-1f）。
                         .zIndex(if (showTabBar) 1f else -1f)
-                        // (2) 与转场同步的位移 + 压暗。
                         .graphicsLayer {
                             translationX = -size.width * COVER_SHIFT_RATIO * coveredProgress
                             alpha = 1f - 0.1f * coveredProgress
