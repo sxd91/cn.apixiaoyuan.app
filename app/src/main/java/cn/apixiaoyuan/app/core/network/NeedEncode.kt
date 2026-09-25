@@ -1,5 +1,7 @@
 package cn.apixiaoyuan.app.core.network
 
+import okhttp3.MediaType.Companion.toMediaType
+
 /**
  * 标记该接口的请求体在发出前需要 native 层编码（`libContentEncoder.so`）。
  *
@@ -67,6 +69,22 @@ object EncodeBridge {
  * 实现要点：RequestBody 是流式的，编码必须把整个 body 读成字节、编码、
  * 再塞回一个新 RequestBody。这会失去流式特性——对 JSON 接口无所谓，
  * 对上传接口是灾难，因此只对标注了 [NeedEncode] 的请求做这件事。
+ *
+ * ## Content-Type 必须改成 `application/octet-stream`（2026-09-25 对齐原版）
+ *
+ * 原版 `wp/h.b(Converter, Object)` 逐行实现是：
+ * ```
+ * new Buffer() → converter.convert(obj) → RequestBody.writeTo(buffer)
+ *   → buffer.readByteArray() → ds/i4.c([B)          // gzip + libContentEncoder
+ *   → RequestBody.create(MediaType.parse("application/octet-stream"), bytes)
+ * ```
+ *
+ * 注意最后一步 —— 原版**无条件把 Content-Type 改写成
+ * `application/octet-stream`**，不是沿用原来的 `application/json`。
+ * 此前本项目用 `body.contentType()`（保留原类型），与协议不符：
+ * 服务端的 `solar-encoder` 中间件据此判断「body 是否已编码」，
+ * 沿用 JSON 类型会让它认为收到的仍是明文而拒绝（实测 417
+ * `x-block-by: solar-encoder`）。
  */
 class NeedEncodeInterceptor : okhttp3.Interceptor {
 
@@ -83,11 +101,19 @@ class NeedEncodeInterceptor : okhttp3.Interceptor {
         val raw = okio.Buffer().also { body.writeTo(it) }.readByteArray()
         val encoded = EncodeBridge.encode(raw)
 
-        val newBody = okhttp3.RequestBody.create(
-            body.contentType(),
-            encoded,
-        )
-        val newRequest = request.newBuilder().method(request.method, newBody).build()
+        // 与 `wp/h.b` 一致：编码后的 body 一律声明为 octet-stream。
+        // 二进制编码结果本来就不是 JSON，用 JSON 的 Content-Type 描述它是错的。
+        val newRequest = request.newBuilder()
+            .method(
+                request.method,
+                okhttp3.RequestBody.create(OCTET_STREAM, encoded),
+            )
+            .build()
         return chain.proceed(newRequest)
+    }
+
+    private companion object {
+        /** 与 `wp/h.b` 末尾的 `MediaType.parse("application/octet-stream")` 同值。 */
+        val OCTET_STREAM: okhttp3.MediaType = "application/octet-stream".toMediaType()
     }
 }
