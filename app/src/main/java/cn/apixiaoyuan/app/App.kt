@@ -106,10 +106,11 @@ class App : Application() {
         // 必须在 AppNavHost 首次组合之前就绪，否则 PageTransitionPrefs.prefs() 会抛错。
         PageTransitionPrefs.init(this)
 
-        // TOTP 门禁：进程创建时清掉「已验证」标记 —— 每次启动都要求重新验证
-        // 一次，才构成真正的门禁。密钥本身持久化不变（用户以它对表验证器 App）。
+        // TOTP 门禁：init 即可。verified 标记验证成功后持久化，**不**在启动时清除 ——
+        // 门禁语义为「认证成功一次后不再弹出」；密钥本身持久化不变。
+        // 若需恢复每次启动验证，取消下行注释：
+        // TotpGate.resetVerified()
         TotpGate.init(this)
-        TotpGate.resetVerified()
 
         // 外观设置（主题模式 / 取色风格 / 颜色规格 / 种子色 / 底栏效果）。
         // 必须在 ReverseOldGuyTheme 首次组合之前就绪 —— 它 init 时会把
