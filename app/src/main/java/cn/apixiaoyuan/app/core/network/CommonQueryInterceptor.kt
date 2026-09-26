@@ -32,14 +32,17 @@ import cn.apixiaoyuan.app.core.sign.SignComputer
  *
  * ## 关于 `sign`（已复刻，2026-09-26）
  *
- * `sign` 是 32 位小写 MD5 hex，注入键为 `SIGN`（原版 `Lvp/d;->f`，逐字保留）。
- * 原版调用链已由 dex 交叉引用 + native 反汇编双证：
+ * `sign` 是 32 位小写 MD5 hex，注入键为 **`sign`（小写）** —— 原版键取自
+ * `Lvp/d;->f`，该字段值为 `"sign"`（`vp/d.smali:17`）；同一个类里还有个
+ * `"SIGN"` 字面量，但它只是 `checkNotNullExpressionValue` 的表达式名参数，
+ * 不是注入键（2026-09-26 修正，此前误用小写/大写混用）。原版调用链已由
+ * dex 交叉引用 + native 反汇编双证：
  *
  * ```
  * Lcq/o;->intercept(chain)                    // OkHttp 拦截器
  *   path = url.encodedPath()                  // 只有 path，不含 query
  *   sign = e.zcvsd1wr2t(path, "wdi4n2t8edr", ts)   // ts = prefs["time.delta"]/1000，默认 0
- *   url.addQueryParameter("SIGN", sign)
+ *   url.addQueryParameter("sign", sign)
  * ```
  *
  * `zcvsd1wr2t` 是 `libRequestEncoder.so` 内动态注册的 native 方法。本工程内置该 so，
@@ -86,9 +89,14 @@ class CommonQueryInterceptor(
             // sign 必须最后追加：算法输入是 url.encodedPath()（只有 path，不含 query），
             // 因此顺序不影响 sign 本身；放最后只是为了让抓包日志里 sign 醒目。
             .also { builder ->
-                val sign = SignComputer.sign(url.encodedPath)
-                if (sign != null) {
-                    builder.addQueryParameter(PARAM_SIGN, sign)
+                // 与原版 `cq/o` 一致：`/orion-hubble-config/android/keys/v4`
+                // 这条路径**不加 sign**（原版拦截器内硬编码的排除列表，
+                // 见 smali_classes3/cq/o.smali:65 的 `listOf(...)`）。
+                if (url.encodedPath !in SIGN_EXCLUDED_PATHS) {
+                    val sign = SignComputer.sign(url.encodedPath)
+                    if (sign != null) {
+                        builder.addQueryParameter(PARAM_SIGN, sign)
+                    }
                 }
             }
             .build()
@@ -117,8 +125,32 @@ class CommonQueryInterceptor(
         const val PARAM_WEBVIEW_VERSION = "webviewVersion"
         const val PARAM_WH_RATIO = "whRatio"
 
-        /** 签名参数名。原版 `Lvp/d;->f` 注入时用的键，逐字保留（大小写敏感）。 */
-        const val PARAM_SIGN = "SIGN"
+        /**
+         * 签名参数名。
+         *
+         * ⚠️ **小写 `sign`**，不是 `SIGN`。
+         *
+         * 2026-09-26 由 smali 逐行确证（`smali_classes3/cq/o.smali:292-306`）：
+         * ```
+         * sget-object v3, Lvp/d;->f:Ljava/lang/String;   // vp/d.f == "sign"
+         * const-string v4, "SIGN"                        // 仅作 Intrinsics 的
+         *                                                // 表达式名参数，
+         *                                                // 不是注入键
+         * invoke-virtual {v2, v3, v1}, HttpUrl$Builder;->addQueryParameter(...)
+         * ```
+         * 即注入键取自 `Lvp/d;->f`，而该字段在 `vp/d.smali:17` 明确初始化为
+         * `"sign"`。那个 `"SIGN"` 字符串只是 `checkNotNullExpressionValue` 的
+         * 第二个参数（错误信息里显示的名字），与 query 键无关 ——
+         * 此前把它误读成键名，导致发的 `SIGN=` 服务端根本不认，继续 417。
+         */
+        const val PARAM_SIGN = "sign"
+
+        /**
+         * 不参与签名的路径（原版 `cq/o` 构造器里硬编码的排除列表，逐行：
+         * `smali_classes3/cq/o.smali:65` — `const-string v0, "/orion-hubble-config/android/keys/v4"`
+         * 后跟 `listOf(...)` 存入 `cq/o;->a`，`intercept` 里用 `contains(encodedPath)` 判断）。
+         */
+        val SIGN_EXCLUDED_PATHS = setOf("/orion-hubble-config/android/keys/v4")
 
         /** 真机抓包固定值。 */
         const val VENDOR = "UC"
