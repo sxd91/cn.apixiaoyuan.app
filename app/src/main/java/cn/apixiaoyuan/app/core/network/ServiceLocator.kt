@@ -6,6 +6,7 @@ import cn.apixiaoyuan.app.core.network.api.LeoGatewayService
 import cn.apixiaoyuan.app.core.network.api.LeoMathApiService
 import cn.apixiaoyuan.app.core.network.api.LeoOralApiService
 import cn.apixiaoyuan.app.core.network.api.LeoPoemsParadiseApiService
+import cn.apixiaoyuan.app.core.pk.PkBattleApiService
 import cn.apixiaoyuan.app.core.network.api.LeoProfileApiService
 import cn.apixiaoyuan.app.core.network.api.LeoShareApiService
 import cn.apixiaoyuan.app.core.network.api.LeoUserApiService
@@ -68,6 +69,11 @@ object ServiceLocator {
 
     val poemsParadise: LeoPoemsParadiseApiService by lazy {
         RetrofitFactory.leo(LeoPoemsParadiseApiService::class.java)
+    }
+
+    /** PK 秒结算/循环/并发（`/leo-game-pk/android/...`，主域、_productId=631）。 */
+    val pkBattle: PkBattleApiService by lazy {
+        RetrofitFactory.leo(PkBattleApiService::class.java)
     }
 
     val shepherd: ShepherdApiService by lazy {
