@@ -235,6 +235,13 @@ private fun SubAccountsSection(viewModel: HomeViewModel) {
         }
         return
     }
+    viewModel.accountsError?.let { err ->
+        Text(
+            text = err,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
     if (viewModel.subAccounts.isEmpty()) return
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

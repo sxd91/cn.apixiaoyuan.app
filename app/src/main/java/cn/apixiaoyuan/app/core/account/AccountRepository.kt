@@ -63,26 +63,53 @@ object AccountRepository {
      * 连同原因一起交给上层展示。
      */
     suspend fun fetchSubAccounts(): Result<List<SubAccountItem>> = runCatching {
-        val list = ServiceLocator.subAccount.getSubAccounts()
         val currentUid = SessionStore.yfdU?.toInt()
-        list.map { vo ->
-            val isCurrent = currentUid != null && vo.userId == currentUid
-            // 回填当前用户信息：PK H5 的 getUserInfo 桥能力从这里读
-            // （没有桥时 H5 首屏无名字头像）。
-            if (isCurrent) {
+
+        // 第一步：拿「有哪些子账号」—— 用 context（**不需要设备链**）。
+        //
+        // 此前直接用 batchGet（需要设备链 sid/ks_*），本项目自身登录的 cookie
+        // 没有设备链 → 401 leo-auth → 列表恒空（用户看到「一直闪 + 401」）。
+        // 实测（2026-09-26）：context?_productId=241 用本项目登录 cookie 即 200，
+        // 返回 allSubUserIds。这是无设备链时唯一能拿到子账号 ID 的通道。
+        val ctx = runCatching { ServiceLocator.subAccount.getUserInfosContext() }.getOrNull()
+        val ids = ctx?.allSubUserIds?.map { it.toInt() }?.distinct()
+
+        // 第二步：拿名字头像 —— batchGet（需设备链）。
+        // 失败不致命：降级为只显示 uid，至少让用户看到有几个账号、能切换。
+        val voById = runCatching { ServiceLocator.subAccount.getSubAccounts() }
+            .getOrNull()
+            ?.associateBy { it.userId }
+            ?: emptyMap()
+
+        val resolved = if (!ids.isNullOrEmpty()) {
+            ids
+        } else {
+            // context 也拿不到时，退回 batchGet 的结果（可能为空）。
+            voById.keys.toList()
+        }
+
+        val primary = ctx?.primarySubUserId?.toInt() ?: voById.values.firstOrNull()?.primaryUserId ?: 0
+
+        resolved.map { uid ->
+            val vo = voById[uid]
+            val isCurrent = currentUid != null && uid == currentUid
+            if (isCurrent && vo != null) {
+                // 回填当前用户信息：PK H5 的 getUserInfo 桥能力从这里读。
                 SessionStore.saveCurrentUserInfo(
                     nickname = vo.nickname ?: vo.defaultNickname,
                     avatarUrl = vo.avatarUrl,
                 )
             }
             SubAccountItem(
-                userId = vo.userId,
-                nickname = vo.nickname ?: vo.defaultNickname ?: "未命名",
-                grade = vo.grade,
-                primaryUserId = vo.primaryUserId,
-                avatarUrl = vo.avatarUrl,
+                userId = uid,
+                // 拿不到名字头像（batchGet 401）时降级显示 uid，
+                // 好过显示「未命名」或整块空白。
+                nickname = vo?.nickname ?: vo?.defaultNickname ?: "账号 $uid",
+                grade = vo?.grade ?: 0,
+                primaryUserId = vo?.primaryUserId ?: primary,
+                avatarUrl = vo?.avatarUrl,
                 isCurrent = isCurrent,
-                isPrimary = vo.userId == vo.primaryUserId,
+                isPrimary = uid == primary,
             )
         }
     }

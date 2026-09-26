@@ -76,6 +76,27 @@ interface SubAccountApiService {
     suspend fun getSubAccounts(): List<UserVO>
 
     /**
+     * 子账号 ID 列表（**不需要设备链**）。
+     *
+     * `GET /leo-profile/api/user-infos/context?_productId=241`
+     * 实测（2026-09-26，本项目自身登录 cookie、无 sid/ks_*）→ 200：
+     * ```json
+     * {"deviceId":0,"originUserId":511467407,"ytkUserId":511467407,
+     *  "primarySubUserId":511467407,
+     *  "allSubUserIds":[511467407,1066052990,1155551346]}
+     * ```
+     * 而 `batchGet`（拿名字头像）无设备链时是 401 leo-auth。
+     * 所以本接口是「无设备链也能拿到有哪些子账号」的唯一通道。
+     */
+    @BaseUrl(BASE_LEO)
+    @CheckNothing
+    @GsonConverter
+    @GET("/leo-profile/api/user-infos/context")
+    suspend fun getUserInfosContext(
+        @Query("_productId") productId: String = "241",
+    ): UserInfosContext
+
+    /**
      * 创建子账号（宝贝学习账号）。
      *
      * POST `/accounts/android/registerSonSubUser`（账号域），**无 body、无 query**。
@@ -191,3 +212,16 @@ interface SubAccountApiService {
  * 签名里留下可读的语义名。
  */
 typealias SubAccountVO = cn.apixiaoyuan.app.core.model.UserVO
+
+/**
+ * `GET /leo-profile/api/user-infos/context` 的响应。
+ *
+ * [allSubUserIds] 即当前物理账号名下的**全部子账号 ID**（含主账号自己）。
+ */
+data class UserInfosContext(
+    val deviceId: Long = 0L,
+    val originUserId: Long = 0L,
+    val ytkUserId: Long = 0L,
+    val primarySubUserId: Long = 0L,
+    val allSubUserIds: List<Long> = emptyList(),
+)

@@ -8,6 +8,9 @@ import androidx.lifecycle.viewModelScope
 import cn.apixiaoyuan.app.core.account.AccountRepository
 import cn.apixiaoyuan.app.core.account.SubAccountItem
 import cn.apixiaoyuan.app.core.session.SessionStore
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -45,23 +48,27 @@ class HomeViewModel : ViewModel() {
     var message by mutableStateOf<String?>(null)
         private set
 
+    /** 拉取子账号失败的原因（含可行动引导）。null = 无错误。 */
+    var accountsError by mutableStateOf<String?>(null)
+        private set
+
     /** 是否正在切换账号。 */
     private var switching by mutableStateOf(false)
 
     init {
         refreshAccounts()
         // 会话版本戳变化（登录 / 登出 / 切号 / 导入 cookie）→ 重拉列表。
-        // viewModelScope 里观察 mutableStateOf，每次 revision 变化都会触发。
+        //
+        // ## 为什么用 snapshotFlow 而不是 while(true) + delay 忙轮询
+        //
+        // 此前是 `while (true) { if (revision != last) refresh(); delay(200) }` ——
+        // 每 200ms 空转一次，且一次拉取失败（如 401）后状态反复翻转，
+        // UI 上表现为「一直在闪」。snapshotFlow 只在状态**真正变化**时发射，
+        // 无变化时协程挂起（不占 CPU），也天然避免了失败→重拉的抖动。
         viewModelScope.launch {
-            var last = SessionStore.stateRevision
-            while (true) {
-                val cur = SessionStore.stateRevision
-                if (cur != last) {
-                    last = cur
-                    refreshAccounts()
-                }
-                kotlinx.coroutines.delay(200)
-            }
+            snapshotFlow { SessionStore.stateRevision }
+                .drop(1) // 首次值由上面的 refreshAccounts() 消费，跳过
+                .collect { refreshAccounts() }
         }
     }
 
@@ -70,13 +77,25 @@ class HomeViewModel : ViewModel() {
         if (loadingAccounts) return
         if (!SessionStore.isLoggedIn) {
             subAccounts = emptyList()
+            accountsError = null
             return
         }
         loadingAccounts = true
+        accountsError = null
         viewModelScope.launch {
             AccountRepository.fetchSubAccounts()
                 .onSuccess { subAccounts = it }
-                .onFailure { subAccounts = emptyList() }
+                .onFailure { t ->
+                    subAccounts = emptyList()
+                    // 401 = 主域认证失败（缺设备链 sid/ks_*），不是「没有小号」。
+                    // 给可行动的引导，而不是让用户对着空列表猜。
+                    val msg = t.message.orEmpty()
+                    accountsError = if (msg.contains("401")) {
+                        "拉取失败 401：主域需要设备链登录态（sid + ks_*）。请到「账号」页导入登录态后重试。"
+                    } else {
+                        "拉取失败：${t.message ?: t}"
+                    }
+                }
             loadingAccounts = false
         }
     }
