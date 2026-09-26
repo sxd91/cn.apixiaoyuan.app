@@ -205,7 +205,7 @@ fun PkH5Screen(
     //  1. H5 自己有历史（含 SPA 的 pushState/hash 导航，Chromium 会记进
     //     navigation controller）→ `goBack()`，不退容器；
     //  2. 已在 H5 首页 → 回调 [onFinish]，由调用方决定去哪。
-    //     [PkScreen] 传的是 `navController.popBackStack()`，即回主页。
+    //     [PkScreen] 传的是 `popBackStack<RouteHome>`，即回主页。
     BackHandler(enabled = true) {
         goBackOrFinish(webView, onFinish)
     }
