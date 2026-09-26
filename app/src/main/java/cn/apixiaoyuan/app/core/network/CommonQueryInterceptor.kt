@@ -86,6 +86,14 @@ class CommonQueryInterceptor(
             .addQueryParameter(PARAM_DEVICE_CATEGORY, DEVICE_CATEGORY)
             .addQueryParameter(PARAM_WEBVIEW_VERSION, WEBVIEW_VERSION)
             .addQueryParameter(PARAM_WH_RATIO, WH_RATIO)
+            // isBackground：**原版必带**，本项目此前漏了。
+            // 逐字来自原版真实请求日志（`AutoOral` 抓包器，2026-09-25）：
+            //   GET /leo-star/android/exercise/item/status?_productId=611&platform=android37
+            //     &version=3.140.1&vendor=UC&deviceCategory=phone&av=5
+            //     &webviewVersion=150&whRatio=2.17&isBackground=0&sign=<32hex>
+            // 注意原版顺序是 deviceCategory → av → webviewVersion → whRatio → isBackground → sign，
+            // 与本类此前的顺序（av 在 deviceCategory 前）不同。
+            .addQueryParameter(PARAM_IS_BACKGROUND, "0")
             // sign 必须最后追加：算法输入是 url.encodedPath()（只有 path，不含 query），
             // 因此顺序不影响 sign 本身；放最后只是为了让抓包日志里 sign 醒目。
             .also { builder ->
@@ -124,6 +132,14 @@ class CommonQueryInterceptor(
         const val PARAM_DEVICE_CATEGORY = "deviceCategory"
         const val PARAM_WEBVIEW_VERSION = "webviewVersion"
         const val PARAM_WH_RATIO = "whRatio"
+        /**
+         * 是否后台。
+         *
+         * **原版每个主域请求都带**（值恒为 `"0"`），逐字来自原版真实请求日志
+         * （`AutoOral` 抓包器落盘 `/data/data/com.fenbi.android.leo/files/log-export/`）。
+         * 本项目此前完全没带这个参数 —— 属可确认的协议差异。
+         */
+        const val PARAM_IS_BACKGROUND = "isBackground"
 
         /**
          * 签名参数名。
