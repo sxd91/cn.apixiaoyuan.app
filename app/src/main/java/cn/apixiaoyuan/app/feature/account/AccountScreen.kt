@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import cn.apixiaoyuan.app.core.account.SubAccountItem
+import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import top.yukonga.miuix.kmp.basic.Button
@@ -90,6 +91,35 @@ fun AccountScreen(
                 }
             }
 
+            // ==================== 改名 ====================
+            // 「无视名字限制」开关合并进此处：打开后客户端不做长度/字符校验，
+            // 昵称原样提交，由服务端裁决 —— 即「原生无限制改名」。
+            SectionCard(title = "修改昵称") {
+                TextField(
+                    value = viewModel.nicknameInput,
+                    onValueChange = { viewModel.nicknameInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = "昵称",
+                    useLabelAsPlaceholder = true,
+                    singleLine = true,
+                )
+                val unlimited = OldSimianPrefs.ignoreNicknameRestriction
+                Text(
+                    text = if (unlimited) {
+                        "已开启「无视名字限制」：客户端不校验长度与字符，原样提交。"
+                    } else {
+                        "关闭「无视名字限制」时，本地限制 16 个字符。"
+                    },
+                    color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
+                )
+                Button(
+                    onClick = { viewModel.rename() },
+                    enabled = !viewModel.submittingNickname,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (viewModel.submittingNickname) "提交中…" else "确认修改昵称")
+                }
+            }
             // ==================== 宝贝学习账号 ====================
             SectionCard(title = "宝贝学习账号") {
                 if (viewModel.subAccounts.isEmpty()) {

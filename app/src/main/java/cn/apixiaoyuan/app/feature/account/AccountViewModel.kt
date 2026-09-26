@@ -9,6 +9,7 @@ import cn.apixiaoyuan.app.core.account.AccountRepository
 import cn.apixiaoyuan.app.core.account.SubAccountItem
 import cn.apixiaoyuan.app.core.auth.AuthRepository
 import cn.apixiaoyuan.app.core.model.UserVO
+import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import cn.apixiaoyuan.app.core.session.SessionStore
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -65,6 +66,12 @@ class AccountViewModel : ViewModel() {
 
     private var countdownJob: Job? = null
 
+    /** 改名：待提交的新昵称（初值取当前昵称）。 */
+    var nicknameInput by mutableStateOf("")
+    /** 是否正在提交改名。 */
+    var submittingNickname by mutableStateOf(false)
+        private set
+
     init {
         refresh()
     }
@@ -75,7 +82,11 @@ class AccountViewModel : ViewModel() {
         loading = true
         message = null
         viewModelScope.launch {
-            currentUser = AccountRepository.fetchCurrentUser()
+            val user = AccountRepository.fetchCurrentUser()
+            currentUser = user
+            // 改名输入框初值：首次拉到昵称时回填，之后不覆盖用户正在编辑的内容
+            // （避免 refresh 把用户敲了一半的昵称冲掉）。
+            if (nicknameInput.isBlank()) nicknameInput = user?.nickname.orEmpty()
             // 手机号初值：从登录态里推不出来（cookie 里没有手机号），
             // 留空让用户自己填，避免瞎猜。
             subAccounts = AccountRepository.fetchSubAccounts()
@@ -213,6 +224,61 @@ class AccountViewModel : ViewModel() {
                 message = "改密码失败：${it.message ?: it}"
             }
         }
+    }
+
+    /**
+     * 提交改名。
+     *
+     * ## 与「无视名字限制」的关系（用户明确要求合并）
+     *
+     * `OldSimianPrefs.ignoreNicknameRestriction` 打开时，**跳过客户端侧的全部昵称
+     * 校验** —— 长度、字符、敏感词都不拦，直接把原样昵称发给服务端。这就是
+     * 「原生无限制改名」：限制与否只由服务端判定，客户端不做二次裁剪。
+     *
+     * 关闭时走一套保守校验（长度 ≤ 16、非空），与参考项目 `cn.nizou.sxd` 的
+     * 昵称口径一致 —— 不自行发明字符集规则，避免误拦合法昵称。
+     *
+     * 无论开关如何，空昵称一律拦下：`PUT /leo-profile/android/user-infos` 收到空串
+     * 会把昵称清空，那是不可逆的破坏性操作，不该由一次误触触发。
+     */
+    fun rename() {
+        if (submittingNickname) return
+        val name = nicknameInput.trim()
+        if (name.isEmpty()) {
+            message = "昵称不能为空"
+            return
+        }
+        val unlimited = OldSimianPrefs.ignoreNicknameRestriction
+        if (!unlimited && name.length > NICKNAME_MAX_LENGTH) {
+            message = "昵称最长 $NICKNAME_MAX_LENGTH 个字符（当前 ${name.length}）。" +
+                "需要更长请打开「无视名字限制」。"
+            return
+        }
+        submittingNickname = true
+        message = null
+        viewModelScope.launch {
+            val result = AccountRepository.updateNickname(name)
+            submittingNickname = false
+            result.onSuccess { user ->
+                currentUser = user
+                nicknameInput = user.nickname ?: name
+                message = "昵称已修改为「${user.nickname ?: name}」"
+                refresh()
+            }.onFailure {
+                message = "改名失败：${it.message ?: it}"
+            }
+        }
+    }
+
+    /**
+     * 客户端侧昵称长度上限（仅在「无视名字限制」关闭时生效）。
+     *
+     * 取 16 而不是别的值：参考项目 `cn.nizou.sxd` 的昵称限制是 GBK 字节 ≤ 16
+     * （2026-08-29 合并的双倍昵称长度），本项目按字符数对齐到同一量级。
+     * 打开开关后此上限不再生效，由服务端裁决。
+     */
+    companion object {
+        private const val NICKNAME_MAX_LENGTH = 16
     }
 
     fun clearMessage() {
