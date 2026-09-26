@@ -124,7 +124,12 @@ fun AccountScreen(
             SectionCard(title = "宝贝学习账号") {
                 if (viewModel.subAccounts.isEmpty()) {
                     Text(
-                        text = "没有可显示的宝贝账号。",
+                        text = if (viewModel.loading) {
+                            "正在拉取宝贝账号…"
+                        } else {
+                            "没有可显示的宝贝账号。若你确认有小号，点「刷新」重试；" +
+                                "仍为空说明当前登录账号名下确实没有其它账号。"
+                        },
                         color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
                     )
                 } else {
@@ -268,35 +273,6 @@ fun AccountScreen(
                 ) {
                     Text(if (viewModel.submittingPassword) "提交中…" else "确认修改密码")
                 }
-            }
-
-            // ==================== 登录态导入 ====================
-            SectionCard(title = "导入登录态（主域权限）") {
-                Text(
-                    text = "主域（练习 / 刷分 / 资料）需要两层凭据：设备链（sid + ks_sess + " +
-                        "ks_deviceid）由原版 App 下发，本项目拿不到；用户凭据本项目登录已有。" +
-                        "两层齐备后主域接口才能通过（实测已确认可返回业务数据）。",
-                    color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
-                )
-                TextField(
-                    value = viewModel.cookieInput,
-                    onValueChange = { viewModel.cookieInput = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "sid=...; ks_sess=...; ks_deviceid=...（可只粘这三个）",
-                    useLabelAsPlaceholder = true,
-                    maxLines = 4,
-                )
-                Button(
-                    onClick = { viewModel.importCookies() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("导入")
-                }
-                Text(
-                    text = "导入只覆盖同名项，不会清掉本项目登录已拿到的 cookie —— " +
-                        "两层必须共存。设备链也不会被服务端的清除指令抹掉。",
-                    color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
-                )
             }
 
             viewModel.message?.let {

@@ -94,19 +94,10 @@ object AuthRepository {
                 val uid = account.id.takeIf { it != 0 } ?: account.primarySubUserId
                 if (uid != 0 && SessionStore.yfdU == null) SessionStore.saveYfdU(uid.toLong())
             }
-            // 子账号 ID 列表只能在登录响应里截 —— 服务端没有单独的列表接口，
-            // 只有 batchGet 批量换资料。key "6" 是小猿口算所属业务线。
-            runCatching {
-                val ids = account.subUserInfos?.project2SubUserInfo?.get(PROJECT_KEY)?.subUserIds
-                if (!ids.isNullOrEmpty()) SessionStore.saveSubUserIds(ids)
-            }
             LoginOutcome.Success(user = null)
         },
         onFailure = { e -> mapLoginError(e) },
     )
-
-    /** 小猿口算在 `subUserInfos` 里的业务线 key。 */
-    private const val PROJECT_KEY = "6"
 
     /**
      * 短信验证码登录。
@@ -152,10 +143,6 @@ object AuthRepository {
             runCatching {
                 val uid = account.id.takeIf { it != 0 } ?: account.primarySubUserId
                 if (uid != 0 && SessionStore.yfdU == null) SessionStore.saveYfdU(uid.toLong())
-            }
-            runCatching {
-                val ids = account.subUserInfos?.project2SubUserInfo?.get(PROJECT_KEY)?.subUserIds
-                if (!ids.isNullOrEmpty()) SessionStore.saveSubUserIds(ids)
             }
             LoginOutcome.Success(user = null)
         },

@@ -18,12 +18,16 @@ import kotlinx.coroutines.launch
 /**
  * 账号页状态机：宝贝学习账号切换 + 改密码。
  *
- * ## 数据来源的一个硬约束
+ * ## 子账号列表的来源（2026-09-26 修正）
  *
- * 子账号 ID 列表**只能从登录响应里取**（`UserAccount.subUserInfos`），服务端
- * 没有单独的列表接口。这意味着：**用旧版本登录过、或升级前就已登录的用户，
- * 本地没有这份缓存，列表会是空的**。本类对此的处理是如实提示「重新登录一次
- * 以载入宝贝列表」，而不是假装列表为空 = 没有子账号。
+ * 直接调主域无参接口 `GET /leo-profile/android/user-infos/batchGet`
+ * （原版 `LeoProfileApiService.getSubAccounts()`），按当前 cookie 返回
+ * 账号名下的全部 `UserVO`。
+ *
+ * 此前依赖登录响应里的 `UserAccount.subUserInfos.project2SubUserInfo["6"].subUserIds`
+ * 拿 ID 列表 —— 该字段在 3.141.1 的 dex 里**根本不存在**，导致 ID 列表恒空、
+ * 列表恒空，还多出一条「请重新登录以载入」的假提示。现在这条链路已整体删除，
+ * 不再有「必须先登录过才看得到」的限制。
  *
  * ## 切换账号后的副作用
  *
@@ -35,9 +39,6 @@ class AccountViewModel : ViewModel() {
     /** 当前账号资料。null = 未拉到。 */
     var currentUser by mutableStateOf<UserVO?>(null)
         private set
-
-    /** 导入登录态用的文本（标准 Cookie 头形态）。 */
-    var cookieInput by mutableStateOf("")
 
     /** 宝贝学习账号列表。 */
     var subAccounts by mutableStateOf<List<SubAccountItem>>(emptyList())
@@ -89,12 +90,16 @@ class AccountViewModel : ViewModel() {
             if (nicknameInput.isBlank()) nicknameInput = user?.nickname.orEmpty()
             // 手机号初值：从登录态里推不出来（cookie 里没有手机号），
             // 留空让用户自己填，避免瞎猜。
-            subAccounts = AccountRepository.fetchSubAccounts()
+            //
+            // 宝贝列表：把失败原因**说出来**，不再静默吞成空表 —— 否则用户看到
+            // 的永远是「没有可显示的宝贝账号」，分不清是没有小号还是请求挂了。
+            AccountRepository.fetchSubAccounts()
+                .onSuccess { subAccounts = it }
+                .onFailure {
+                    subAccounts = emptyList()
+                    message = "宝贝账号列表拉取失败：${it.message ?: it}"
+                }
             loading = false
-            if (subAccounts.isEmpty() && SessionStore.subUserIds().isEmpty()) {
-                message = "本地没有宝贝账号列表缓存（服务端无独立列表接口）。" +
-                    "请重新登录一次以载入。"
-            }
         }
     }
 
@@ -147,10 +152,6 @@ class AccountViewModel : ViewModel() {
             loading = false
             result.onSuccess { account ->
                 SessionStore.saveYfdU(account.id.toLong())
-                runCatching {
-                    val ids = account.subUserInfos?.project2SubUserInfo?.get("6")?.subUserIds
-                    if (!ids.isNullOrEmpty()) SessionStore.saveSubUserIds(ids)
-                }
                 message = "已新建并切换到新宝贝账号"
                 refresh()
             }.onFailure {
@@ -162,7 +163,11 @@ class AccountViewModel : ViewModel() {
     /** 删除宝贝学习账号（需短信验证码）。 */
     fun deleteSubAccount(item: SubAccountItem, verification: String) {
         if (loading) return
-        val primary = currentUser?.primaryUserId ?: return
+        // 主账号 ID 优先取列表项自带的（同一份 `UserVO` 数据，一定准确），
+        // 退而取当前账号资料的 —— 两者都不存在才放弃。
+        val primary = item.primaryUserId.takeIf { it > 0 }
+            ?: currentUser?.primaryUserId
+            ?: return
         loading = true
         message = null
         viewModelScope.launch {
@@ -174,11 +179,8 @@ class AccountViewModel : ViewModel() {
             loading = false
             result.onSuccess {
                 message = "已删除「${item.nickname}」"
-                // 服务端已从 subUserIds 摘掉该账号，本地缓存要同步 ——
-                // 否则列表里还会残留一条（refresh 时 batchGet 已查不到它）。
-                SessionStore.saveSubUserIds(
-                    SessionStore.subUserIds().filterNot { it == item.userId },
-                )
+                // 不再手工维护本地 ID 缓存：列表现在每次 refresh 都直接向服务端要，
+                // 服务端删掉后自然不再返回该账号。
                 refresh()
             }.onFailure {
                 message = "删除失败：${it.message ?: it}"
@@ -299,32 +301,6 @@ class AccountViewModel : ViewModel() {
 
     fun clearMessage() {
         message = null
-    }
-
-    /**
-     * 导入登录态（标准 `Cookie` 头形态）。
-     *
-     * **这是本项目拿到主域权限的唯一途径** —— 主域认证需要
-     * `sid` + `ks_sess` + `ks_deviceid` 三者齐备，而它们只由原版 App 的
-     * 登录通道下发，本项目自己拿不到（详见
-     * [cn.apixiaoyuan.app.core.session.SessionStore.importCookieHeader] 的 KDoc）。
-     *
-     * 导入后立刻刷新，让用户马上看到效果。
-     */
-    fun importCookies() {
-        val text = cookieInput.trim()
-        if (text.isEmpty()) {
-            message = "请先粘贴 Cookie 字符串"
-            return
-        }
-        val n = SessionStore.importCookieHeader(text)
-        if (n == 0) {
-            message = "没能解析出任何 cookie（应为 name=value; name2=value2 形态）"
-            return
-        }
-        cookieInput = ""
-        message = "已导入 $n 条 cookie。若主域接口仍报 401，说明缺少 sid / ks_sess / ks_deviceid。"
-        refresh()
     }
 
     private fun startCountdown() {

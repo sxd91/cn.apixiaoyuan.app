@@ -44,20 +44,36 @@ import retrofit2.http.Query
 interface SubAccountApiService {
 
     /**
-     * 拉子账号列表。
+     * 拉子账号（宝贝学习账号）列表。
      *
-     * GET `/leo-profile/android/user-infos/batchGet`（主域）。
+     * GET `/leo-profile/android/user-infos/batchGet`（**主域** `leo_base_url`），
+     * **无任何参数** —— 直接返回当前账号名下的 `List<UserVO>`。
      *
-     * Query 是**逗号分隔的 userId 列表** —— 原版把 `UserAccount.subUserInfos`
-     * 里拿到的 id 拼成串传进来，一次批量查回全部子账号的 `UserVO`。
+     * ## 2026-09-26 修正：此前多传了 `userIds`
+     *
+     * 原版 `LeoProfileApiService`（MT APK MCP 逐行）：
+     * ```smali
+     * .annotation runtime Lcom/fenbi/android/leo/network/annotations/BaseUrl;
+     *     value = "leo_base_url"
+     * .method public abstract getSubAccounts(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+     *     @GET("/leo-profile/android/user-infos/batchGet")
+     *     → List<com.yuanfudao.android.leo.user.data.UserVO>
+     * .end method
+     * ```
+     * 方法名是 `getSubAccounts`，**没有 `userIds` 形参**，也没有 `@Query`。
+     * 服务端按当前登录态（cookie）决定返回谁的名下账号，客户端不需要、也不该
+     * 先有 ID 列表。
+     *
+     * 此前本接口写成 `@Query("userIds") userIds: String`，其值来自登录响应的
+     * `UserAccount.subUserInfos.project2SubUserInfo["6"].subUserIds` —— 而该字段
+     * 在 3.141.1 的 dex 里**根本不存在**（`dex_names` / `dex_strings` 双查 0 命中），
+     * 于是 ID 列表恒空 → 接口从不被调用 → **小号列表恒空**。
      */
     @BaseUrl(BASE_LEO)
     @CheckNothing
     @GsonConverter
     @GET("/leo-profile/android/user-infos/batchGet")
-    suspend fun batchGetUserInfos(
-        @Query("userIds") userIds: String,
-    ): List<UserVO>
+    suspend fun getSubAccounts(): List<UserVO>
 
     /**
      * 创建子账号（宝贝学习账号）。

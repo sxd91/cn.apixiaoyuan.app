@@ -32,7 +32,6 @@ object SessionStore {
     private const val PREF_NAME = "leo_session"
     private const val KEY_COOKIES = "cookieJsonListKey"
     private const val KEY_YFD_U = "yfd_u"
-    private const val KEY_SUB_USER_IDS = "sub_user_ids"
     private const val KEY_GRADE = "grade"
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -86,69 +85,30 @@ object SessionStore {
     }
 
     /**
-     * 保存子账号（宝贝学习账号）ID 列表。
-     *
-     * 数据源是登录响应 `UserAccount.subUserInfos.project2SubUserInfo["6"].subUserIds` ——
-     * 服务端**没有**单独的「我的子账号列表」接口，只有 `batchGet` 批量换资料，
-     * 所以 ID 列表必须在登录时截下来。
-     *
-     * **列表第一个元素是主账号自己**，调用方负责区分（见
-     * [cn.apixiaoyuan.app.core.account.AccountRepository.fetchSubAccounts]）。
-     */
-    fun saveSubUserIds(ids: List<Int>) {
-        prefs().edit().putString(KEY_SUB_USER_IDS, ids.joinToString(",")).apply()
-    }
-
-    /** 读子账号 ID 列表。未登录 / 单账号用户返回空表。 */
-    fun subUserIds(): List<Int> {
-        val raw = prefs().getString(KEY_SUB_USER_IDS, null) ?: return emptyList()
-        return raw.split(',').mapNotNull { it.trim().toIntOrNull() }
-    }
-
-    /**
      * 从标准 `Cookie` 请求头字符串导入 cookie（合并，同名覆盖）。
      *
-     * ## 为什么需要这个入口（2026-09-25 实测确证）
+     * ## 2026-09-26 更正：主域**并不需要**设备链
      *
-     * 主域（`xyks.yuanfudao.com`）的认证是**两层**，必须同时满足：
-     *
-     * | 层 | 需要的 cookie | 来源 |
-     * |---|---|---|
-     * | 设备认证 | `sid` + `ks_sess` + `ks_deviceid` | **只由原版 App 下发** |
-     * | 用户认证 | `sess` / `userid` / `g_sess` / `persistent` | 本项目登录即可拿到 |
-     *
-     * 逐组合实测（探针 `GET /leo-star/android/exercise/rank/pre-fetch`）：
+     * 旧注释称「主域需 `sid` + `ks_sess` + `ks_deviceid` 三件套、只能靠用户从
+     * 原版导入」—— **该结论已被实测推翻**。用本项目自身登录 cookie 直打主域
+     * 探针 `GET /leo-star/android/exercise/rank/pre-fetch`：
      *
      * | 携带的 cookie | 结果 |
      * |---|---|
-     * | 无 / 仅设备链 / 仅本项目登录 cookie | 401 `unauthorized` |
-     * | **设备链 + 本项目登录 cookie** | **200 + 完整业务数据** |
+     * | 完整（登录 cookie + sid/ks_*） | 200 |
+     * | **只留登录 cookie，去掉 sid 与全部 ks_*** | **200** |
+     * | 不带 | 401 |
      *
-     * 200 响应体实证（含 `curWeekScore` / `expectedMultiple` / `rankVersion`）：
-     * `{"ver":"1.0","status":200,"data":{"curRank":0,"curWeekScore":0,
-     *   "expectedMultiple":{"multiple":1,"continuousCheckInCount":1},...}}`
+     * 即：**登录本身下发的 cookie 就够拿到主域权限**。主域业务端点报 417 是
+     * **只缺 `sign`（编码层）**，与认证无关（认证失败会是 401）。
      *
-     * ## 为什么设备链拿不到
+     * 因此账号页已移除「导入登录态」入口 —— 它是基于错误结论做的多余设计，
+     * 会让用户以为必须去原版抄 cookie。本方法保留为**应急通道**（例如切换
+     * 环境 / 排障时手工灌 cookie）。
      *
-     * - 直连版 `POST /accounts/android/safe/login`（账号域）实测只下发
-     *   `sess` / `userid` / `g_sess` / `__sub_user_infos__` / `g_loc` / `persistent`
-     *   —— **不含 `sid` 与任何 `ks_*`**。
-     * - 全 APK 排查：`ks_*` 不在任何 smali、assets，也不在
-     *   `libRedressProcess.so` / `libContentEncoder.so` 的字符串表里 ——
-     *   是**服务端在特定风控流程中下发**的，不是客户端算出来的。
-     * - 真机原版 MMKV `cookie_store / cookieJsonListKey` 里的 domain 是
-     *   `yuanfudao.com`（**不带前导点**），与常见 `Set-Cookie` 形态不同。
-     *
-     * 所以本项目**无法自行获得设备链**，只能由用户从原版 App 导入。
-     *
-     * ## 导入格式
-     *
-     * 标准 `Cookie` 头形态（`name=value; name2=value2`）。
-     * **域名统一按 `yuanfudao.com` 写入**（实测原版形态），
-     * 这样 cookie 对 `ape-api` 与 `xyks` 两个子域同时生效。
-     *
-     * 导入只覆盖同名项，**不会清掉本项目登录已拿到的 cookie** ——
-     * 两层必须共存，缺一不可。
+     * 域统一按 `yuanfudao.com` 写入（与原版 MMKV 形态一致），
+     * 这样对 `ape-api` 与 `xyks` 两个子域同时生效。导入只覆盖同名项，
+     * 不会清掉已登录拿到的 cookie。
      *
      * @param header `name=value; name2=value2` 形态的串
      * @return 实际解析出的条目数（0 表示格式不对）

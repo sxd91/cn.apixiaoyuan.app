@@ -17,36 +17,27 @@ import cn.apixiaoyuan.app.core.session.SessionStore
  * 与 [cn.apixiaoyuan.app.core.auth.AuthRepository] 同套路：UI 不直接碰
  * Retrofit Service，异常在这里收敛成 `Result` / null，UI 只处理两态。
  *
- * ## 子账号 ID 从哪来
+ * ## 子账号列表怎么拿（2026-09-26 修正）
  *
- * 服务端不在 `batchGet` 之外单独给「我的子账号列表」接口 —— 子账号 ID 藏在
- * 登录响应 `UserAccount.subUserInfos.project2SubUserInfo["6"].subUserIds` 里
- * （实测响应：
- * `{"project2SubUserInfo":{"6":{"projectId":6,"primarySubUserId":511467407,"subUserIds":[511467407,1066052990,1151665130]}}}`）。
+ * 服务端有一个**无参**接口直接给列表：
+ * `GET /leo-profile/android/user-infos/batchGet`（主域，原版方法名
+ * `LeoProfileApiService.getSubAccounts()`），按当前 cookie 返回
+ * `List<UserVO>` —— 登录态是谁，就返回谁名下的全部账号。
  *
- * 所以要拿列表得两步：
- *  1. [listSubAccountIds] —— 拉当前账号，从 `subUserIds` 取出全部 ID；
- *  2. [batchGetUserInfos] —— 用逗号拼串批量换回 `UserVO`（昵称、头像、年级）。
- *
- * 项目号 `"6"` 是小猿口算所属业务线；`subUserIds` 的第一个元素是**主账号自己**，
- * 不是子账号 —— 展示时必须区分，否则用户会看到「自己」出现在宝贝列表里。
+ * 此前本类绕了一大圈：先要从登录响应的
+ * `UserAccount.subUserInfos.project2SubUserInfo["6"].subUserIds` 拿 ID 列表，
+ * 再拼逗号串调 `batchGet?userIds=...`。这条链路**整体不成立**：
+ *  - `subUserInfos` / `subUserIds` / `project2SubUserInfo` / `primarySubUserId`
+ *    在 3.141.1 的 dex 里**完全不存在**（`dex_names` 与 `dex_strings` 双查 0 命中），
+ *    所以 ID 列表永远是空 → `batchGet` 从不被调用 → **小号列表恒空**；
+ *  - 原版接口本身也不吃 `userIds`，多传参数与协议不符。
  */
 object AccountRepository {
 
-    /** 小猿口算所属业务线在 `subUserInfos` 里的 key。 */
-    private const val PROJECT_KEY = "6"
-
     /**
-     * 当前账号的完整信息（含 `subUserIds`）。
+     * 当前账号的完整信息。
      *
-     * 用密码登录接口重放不可行（需要密码），改用 `GET /accounts/android/current`。
-     * 该接口在 [cn.apixiaoyuan.app.core.network.api.YtkAccountService] 里是
-     * `Call<CurrentUserInfo>` 形态，不含 `subUserInfos` —— 所以这里退一步：
-     * 直接从 [ServiceLocator.subAccount] 的 `batchGet` 反查不可行（要先有 ID）。
-     *
-     * **实际做法**：调 `profile.getUserInfo()` 拿主账号 `UserVO`，再调
-     * `subAccount.batchGetUserInfos` 只查主账号自己 —— 子账号 ID 列表则由
-     * [listSubAccountIds] 从会话里的登录响应缓存取（见那里的说明）。
+     * 调 `profile.getUserInfo()` 拿主账号 `UserVO`。
      */
     suspend fun fetchCurrentUser(): UserVO? = runCatching {
         ServiceLocator.profile.getUserInfo()
@@ -57,44 +48,30 @@ object AccountRepository {
     }
 
     /**
-     * 拉子账号 ID 列表（含主账号自己）。
-     *
-     * 数据源是 [SessionStore] 里缓存的登录响应 `subUserIds`。登录时
-     * [cn.apixiaoyuan.app.core.auth.AuthRepository] 已经把整个 `UserAccount`
-     * 存进来了（见 `SessionStore.saveAccount`），这里只做读取。
-     *
-     * 登录响应里没有该字段时返回空表（老账号 / 单账号用户就是这种情况）。
-     */
-    fun listSubAccountIds(): List<Int> = SessionStore.subUserIds()
-
-    /**
-     * 批量换回子账号资料。
-     *
-     * @param ids 子账号 ID 列表；空表直接返回空，不发请求。
-     */
-    suspend fun batchGetUserInfos(ids: List<Int>): List<UserVO> {
-        if (ids.isEmpty()) return emptyList()
-        return runCatching {
-            ServiceLocator.subAccount.batchGetUserInfos(ids.joinToString(","))
-        }.getOrDefault(emptyList())
-    }
-
-    /**
      * 一次拿齐「宝贝学习账号列表」。
      *
-     * 组合 [listSubAccountIds] + [batchGetUserInfos]，并**标出哪个是当前登录账号**。
+     * 直接调无参的 [ServiceLocator.subAccount] `getSubAccounts()`，
+     * 并把**主账号**与**当前登录账号**标出来：
+     *  - `isPrimary` —— `userId == primaryUserId`（响应里每个 `UserVO` 都带）；
+     *  - `isCurrent` —— `userId` 与服务端下发的 `userid` cookie（= [SessionStore.yfdU]）一致。
+     *
+     * ## 为什么返回 `Result` 而不是「失败给空表」
+     *
+     * 此前这里把异常吞成 `emptyList()`，界面就只剩「没有可显示的宝贝账号」——
+     * 用户完全分不清是**真的没有小号**还是**请求失败了**（401 / 417 / 网络）。
+     * 这正是本轮「小号没写出来」排查困难的直接原因之一，因此改为把失败
+     * 连同原因一起交给上层展示。
      */
-    suspend fun fetchSubAccounts(): List<SubAccountItem> {
-        val ids = listSubAccountIds()
-        if (ids.isEmpty()) return emptyList()
+    suspend fun fetchSubAccounts(): Result<List<SubAccountItem>> = runCatching {
+        val list = ServiceLocator.subAccount.getSubAccounts()
         val currentUid = SessionStore.yfdU?.toInt()
-        return batchGetUserInfos(ids).map { vo ->
+        list.map { vo ->
             SubAccountItem(
                 userId = vo.userId,
                 nickname = vo.nickname ?: vo.defaultNickname ?: "未命名",
                 grade = vo.grade,
+                primaryUserId = vo.primaryUserId,
                 isCurrent = currentUid != null && vo.userId == currentUid,
-                // 主账号 = 主账号 ID（primaryUserId）的那个
                 isPrimary = vo.userId == vo.primaryUserId,
             )
         }
@@ -215,6 +192,10 @@ object AccountRepository {
 /**
  * 宝贝学习账号列表项。
  *
+ * @param primaryUserId 主账号 ID（`UserVO.primaryUserId`）—— 用于界面展示
+ *        「主账号 xxx」，也用于删除接口的 `targetPrimarySubUserId`。
+ *        此前 UI 拿 `SubAccountItem` 里并不存在的 `primaryUserId` 去显示，
+ *        实际取到的是默认值 `0`（显示成「主账号 0」），属于编译期看不出的错。
  * @param isCurrent 是否是**当前登录**的账号（cookie `userid` 与之相同）
  * @param isPrimary 是否是主账号（`userId == primaryUserId`）
  */
@@ -222,6 +203,7 @@ data class SubAccountItem(
     val userId: Int,
     val nickname: String,
     val grade: Int,
+    val primaryUserId: Int,
     val isCurrent: Boolean,
     val isPrimary: Boolean,
 )
