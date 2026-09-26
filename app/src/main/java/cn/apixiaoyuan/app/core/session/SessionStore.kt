@@ -2,6 +2,9 @@ package cn.apixiaoyuan.app.core.session
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import cn.apixiaoyuan.app.core.network.AuthInterceptor
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -33,11 +36,30 @@ object SessionStore {
     private const val KEY_COOKIES = "cookieJsonListKey"
     private const val KEY_YFD_U = "yfd_u"
     private const val KEY_GRADE = "grade"
+    private const val KEY_NICKNAME = "current_nickname"
+    private const val KEY_AVATAR = "current_avatar_url"
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     @Volatile
     private var appContext: Context? = null
+
+    /**
+     * 会话状态修订号 —— 任何「会改变登录态/当前身份」的写入都自增一次。
+     *
+     * 主页的子账号卡片列表需要**随登录 / 切换账号即时刷新**，但 [SessionStore]
+     * 底层是 SharedPreferences（非 Compose 可观察）。这里用一个 Compose 可观察
+     * 计数器当「版本戳」：UI 读它进入重组，重新拉取子账号列表。
+     *
+     * 只做**粗粒度**通知（登录 / 登出 / 切号 / 导入 cookie 都 +1），
+     * 不承载具体语义 —— 具体状态仍以 [SessionStore] 各 getter 为准。
+     */
+    var stateRevision by mutableStateOf(0)
+        private set
+
+    private fun bump() {
+        stateRevision++
+    }
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -71,6 +93,7 @@ object SessionStore {
         cookies.firstOrNull { it.name == "userid" }?.value?.toLongOrNull()?.let {
             prefs().edit().putLong(KEY_YFD_U, it).apply()
         }
+        bump()
     }
 
     /**
@@ -82,6 +105,7 @@ object SessionStore {
      */
     fun saveYfdU(value: Long) {
         prefs().edit().putLong(KEY_YFD_U, value).apply()
+        bump()
     }
 
     /**
@@ -231,6 +255,28 @@ object SessionStore {
         prefs().edit().putInt(KEY_GRADE, grade).apply()
     }
 
+    /**
+     * 当前用户的昵称 / 头像缓存。
+     *
+     * 来源：主页子账号列表（`batchGet` 的 `UserVO`）在 `isCurrent` 项上回填；
+     * PK H5 的 `getUserInfo` 桥能力读这两个值 —— H5 首屏用户卡的名字头像
+     * 主要来源就是它（没有桥时首屏空白，切年级才从 homepage 响应兜底）。
+     */
+    val currentNickname: String?
+        get() = prefs().getString(KEY_NICKNAME, null)
+
+    val currentAvatarUrl: String?
+        get() = prefs().getString(KEY_AVATAR, null)
+
+    /** 回填当前用户昵称 / 头像（拉到 UserVO 后调用）。 */
+    fun saveCurrentUserInfo(nickname: String?, avatarUrl: String?) {
+        prefs().edit()
+            .putString(KEY_NICKNAME, nickname)
+            .putString(KEY_AVATAR, avatarUrl)
+            .apply()
+        bump()
+    }
+
     /** 是否已登录：`userid` cookie 存在即视为已登录。
      *
      * ## 判定口径为什么不是 `sid`
@@ -253,6 +299,7 @@ object SessionStore {
     /** 清空登录态（登出）。 */
     fun clear() {
         prefs().edit().clear().apply()
+        bump()
     }
 
     /**

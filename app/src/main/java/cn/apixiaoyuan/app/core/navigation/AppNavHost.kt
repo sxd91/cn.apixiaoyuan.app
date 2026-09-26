@@ -86,6 +86,9 @@ fun AppNavHost(
             entry<RouteScorePump>(swipeDismiss = NavSwipeDirection.LeftToRight) {
                 cn.apixiaoyuan.app.feature.oldsimian.ScorePumpScreen(navController)
             }
+            entry<RoutePkGrind>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                cn.apixiaoyuan.app.feature.pk.PkGrindScreen(navController)
+            }
             entry<RouteAccount>(swipeDismiss = NavSwipeDirection.LeftToRight) {
                 cn.apixiaoyuan.app.feature.account.AccountScreen(navController)
             }

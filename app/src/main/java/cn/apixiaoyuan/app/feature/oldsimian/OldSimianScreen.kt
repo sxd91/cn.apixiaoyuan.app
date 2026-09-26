@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
+import cn.apixiaoyuan.app.core.navigation.RoutePkGrind
 import cn.apixiaoyuan.app.core.navigation.RouteScorePump
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import top.yukonga.miuix.kmp.basic.Card
@@ -158,6 +159,11 @@ fun OldSimianScreen(navController: AppNavController) {
 
             // ==================== PK ====================
             SectionCard(title = "PK") {
+                EntryRow(
+                    title = "刷 PK 对局",
+                    summary = "纯 API 刷局：选对局类型/对局数/画笔算法，出题→弧线笔迹→提交",
+                    onClick = { navController.navigate(RoutePkGrind) },
+                )
                 SwitchRow(
                     title = "结束页自动化",
                     summary = "结算页自动开下一局（注入 H5 脚本，三级策略）",

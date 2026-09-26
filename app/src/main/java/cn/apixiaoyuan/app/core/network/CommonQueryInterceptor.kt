@@ -75,40 +75,56 @@ class CommonQueryInterceptor(
         // 只处理主域（`xyks.yuanfudao.com`）。
         // 账号域（`ape-api.yuanfudao.com`）实测不需要这组参数，加了会干扰。
         if (url.host != LEO_HOST) return chain.proceed(request)
-        // 已经带过就跳过（幂等：重试 / 重定向时不重复追加）。
-        if (url.queryParameter(PARAM_PRODUCT_ID) != null) return chain.proceed(request)
-        val newUrl = url.newBuilder()
-            .addQueryParameter(PARAM_PRODUCT_ID, PRODUCT_ID)
-            .addQueryParameter(PARAM_PLATFORM, "android$sdkInt")
-            .addQueryParameter(PARAM_VERSION, appVersionName)
-            .addQueryParameter(PARAM_VENDOR, VENDOR)
-            .addQueryParameter(PARAM_AV, AV)
-            .addQueryParameter(PARAM_DEVICE_CATEGORY, DEVICE_CATEGORY)
-            .addQueryParameter(PARAM_WEBVIEW_VERSION, WEBVIEW_VERSION)
-            .addQueryParameter(PARAM_WH_RATIO, WH_RATIO)
-            // isBackground：**原版必带**，本项目此前漏了。
-            // 逐字来自原版真实请求日志（`AutoOral` 抓包器，2026-09-25）：
-            //   GET /leo-star/android/exercise/item/status?_productId=611&platform=android37
-            //     &version=3.140.1&vendor=UC&deviceCategory=phone&av=5
-            //     &webviewVersion=150&whRatio=2.17&isBackground=0&sign=<32hex>
-            // 注意原版顺序是 deviceCategory → av → webviewVersion → whRatio → isBackground → sign，
-            // 与本类此前的顺序（av 在 deviceCategory 前）不同。
-            .addQueryParameter(PARAM_IS_BACKGROUND, "0")
-            // sign 必须最后追加：算法输入是 url.encodedPath()（只有 path，不含 query），
-            // 因此顺序不影响 sign 本身；放最后只是为了让抓包日志里 sign 醒目。
-            .also { builder ->
-                // 与原版 `cq/o` 一致：`/orion-hubble-config/android/keys/v4`
-                // 这条路径**不加 sign**（原版拦截器内硬编码的排除列表，
-                // 见 smali_classes3/cq/o.smali:65 的 `listOf(...)`）。
-                if (url.encodedPath !in SIGN_EXCLUDED_PATHS) {
-                    val sign = SignComputer.sign(url.encodedPath)
-                    if (sign != null) {
-                        builder.addQueryParameter(PARAM_SIGN, sign)
-                    }
-                }
+
+        // 逐参数判断「缺哪个补哪个」，而不是「URL 已带 _productId 就整段跳过」。
+        //
+        // 为什么这样改（2026-09-26 PK 提交 401 修复）：
+        // PK 接口（`/leo-game-pk/...`）要求 `_productId=631`（区别于练习的 611），
+        // 所以 PkBattleApiService 每个方法都**显式**带 `_productId=631&_appId=6&version=3.141.1`。
+        // 旧实现看到 URL 已带 `_productId` 就整段跳过，导致 PK 提交**也缺了
+        // sign / platform / vendor / av / deviceCategory / webviewVersion / whRatio /
+        // isBackground**，服务端 401 `SolarAuthFilter`（本地实测：提交接口缺 sign
+        // 就 401，补齐全套才进业务层）。
+        //
+        // 逐参数判断后：PK 显式带的 631/6/version=3.141.1 原样保留（不会被动成
+        // 611/0.1.0），而它缺的 sign/platform/vendor/... 会被补上 —— 正好满足
+        // PK 提交「631 + 全套公共参数 + sign」的协议要求。
+        val builder = url.newBuilder()
+        var changed = false
+
+        fun ensure(name: String, value: String) {
+            if (url.queryParameter(name) == null) {
+                builder.addQueryParameter(name, value)
+                changed = true
             }
-            .build()
-        return chain.proceed(request.newBuilder().url(newUrl).build())
+        }
+
+        ensure(PARAM_PRODUCT_ID, PRODUCT_ID)
+        ensure(PARAM_PLATFORM, "android$sdkInt")
+        ensure(PARAM_VERSION, appVersionName)
+        ensure(PARAM_VENDOR, VENDOR)
+        ensure(PARAM_AV, AV)
+        ensure(PARAM_DEVICE_CATEGORY, DEVICE_CATEGORY)
+        ensure(PARAM_WEBVIEW_VERSION, WEBVIEW_VERSION)
+        ensure(PARAM_WH_RATIO, WH_RATIO)
+        // isBackground：**原版必带**，本项目此前漏了。
+        // 逐字来自原版真实请求日志（`AutoOral` 抓包器，2026-09-25）：
+        //   GET /leo-star/android/exercise/item/status?_productId=611&platform=android37
+        //     &version=3.140.1&vendor=UC&deviceCategory=phone&av=5
+        //     &webviewVersion=150&whRatio=2.17&isBackground=0&sign=<32hex>
+        ensure(PARAM_IS_BACKGROUND, "0")
+        // sign 最后补：算法输入是 url.encodedPath()（只有 path，不含 query），
+        // 因此顺序不影响 sign 本身；放最后只是为了让抓包日志里 sign 醒目。
+        if (url.queryParameter(PARAM_SIGN) == null && url.encodedPath !in SIGN_EXCLUDED_PATHS) {
+            val sign = SignComputer.sign(url.encodedPath)
+            if (sign != null) {
+                builder.addQueryParameter(PARAM_SIGN, sign)
+                changed = true
+            }
+        }
+
+        if (!changed) return chain.proceed(request)
+        return chain.proceed(request.newBuilder().url(builder.build()).build())
     }
 
     companion object {

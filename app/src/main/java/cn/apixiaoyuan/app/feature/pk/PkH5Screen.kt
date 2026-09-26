@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import cn.apixiaoyuan.app.core.oldsimian.PkJsInjector
+import cn.apixiaoyuan.app.core.oldsimian.PkWebViewBridge
 import cn.apixiaoyuan.app.core.session.SessionStore
 
 /**
@@ -112,10 +113,22 @@ fun PkH5Screen(
                 domStorageEnabled = true
                 loadsImagesAutomatically = true
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                // UA 对齐原版 vgo 容器（取证：BaseWebApp 继承腾讯 X5 WebView，
-                // H5 侧按 UA 特征区分容器能力；自加的 ReverseOldGuy 标记可能被
-                // H5 风控当异常客户端，去掉）。
+                // UA 追加小猿口算客户端标识（2026-09-26 修复）：
+                // PK H5 从 UA 正则解析 `YuanSouTiKouSuan/(\d+\.\d+\.\d+)` 取 version，
+                // 拿不到 version 的接口全部 400；UA 还决定桥层「App 内」分支。
+                // 追加而非整体替换 —— 保留系统 WebView 标识（部分 CSS/JS 特性探测用）。
+                userAgentString = "$userAgentString YuanSouTiKouSuan/3.141.1"
             }
+
+            // 原生桥（2026-09-26 修复「首屏无名字头像」「点击 PK 无反应」）：
+            //  - getUserInfo → H5 首屏用户卡的名字头像主要来源；
+            //  - openWebView → 「开始PK」点击的真正通路（native:// 声明式）；
+            //  - dataEncrypt/dataDecrypt → H5 内部出题/提交的编解码；
+            // 同一实例注册两个名字：H5 桥层无前缀能力找 window.WebView、
+            // LeoSecure 前缀能力找 window.LeoSecureWebView。
+            val bridge = PkWebViewBridge(context.applicationContext, this)
+            addJavascriptInterface(bridge, "WebView")
+            addJavascriptInterface(bridge, "LeoSecureWebView")
 
             // 同步登录态：把 SessionStore 的 cookie 写进 CookieManager。
             // 必须在**首次** loadUrl 之前 —— WebView 用 CookieManager 发请求，

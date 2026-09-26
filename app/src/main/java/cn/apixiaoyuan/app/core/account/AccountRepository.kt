@@ -66,12 +66,22 @@ object AccountRepository {
         val list = ServiceLocator.subAccount.getSubAccounts()
         val currentUid = SessionStore.yfdU?.toInt()
         list.map { vo ->
+            val isCurrent = currentUid != null && vo.userId == currentUid
+            // 回填当前用户信息：PK H5 的 getUserInfo 桥能力从这里读
+            // （没有桥时 H5 首屏无名字头像）。
+            if (isCurrent) {
+                SessionStore.saveCurrentUserInfo(
+                    nickname = vo.nickname ?: vo.defaultNickname,
+                    avatarUrl = vo.avatarUrl,
+                )
+            }
             SubAccountItem(
                 userId = vo.userId,
                 nickname = vo.nickname ?: vo.defaultNickname ?: "未命名",
                 grade = vo.grade,
                 primaryUserId = vo.primaryUserId,
-                isCurrent = currentUid != null && vo.userId == currentUid,
+                avatarUrl = vo.avatarUrl,
+                isCurrent = isCurrent,
                 isPrimary = vo.userId == vo.primaryUserId,
             )
         }
@@ -94,6 +104,39 @@ object AccountRepository {
      */
     suspend fun switchAccount(targetUserId: Int): Result<LoginResponse> = runCatching {
         ServiceLocator.subAccount.switchAccount(targetUserId)
+    }
+
+    /**
+     * 切换到指定宝贝学习账号，并写回 `userid` cookie（**主页与账号页共用的完整实现**）。
+     *
+     * ## 为什么切换逻辑要下沉到这里
+     *
+     * 用户新需求（2026-09-26）：子账号卡片直接显示在**主页**「已登录卡片」下方，
+     * 点哪个切哪个 —— 切换入口不再只有账号页。所以「调 switch 接口 + 写回
+     * `userid` cookie + 刷新 YFD_U 缓存」这段必须收敛成可复用方法，否则主页和
+     * 账号页会各写一份、行为漂移。
+     *
+     * 切换成功后的两件必做之事（缺一不可）：
+     *  1) 本地缓存 YFD_U 跟上；
+     *  2) 把新身份写回 `userid` cookie —— 切换响应未必带 Set-Cookie（或带了但
+     *     jar 未落盘），不显式写一次的话，后续主域请求仍带旧 userid，表现为
+     *     「切换了但没生效」。写的时候沿用原条目的 domain/path，只换 value。
+     *
+     * 新身份取值：优先用切换响应里的 `ytkUserId`（服务端给的真实新身份），
+     * 拿不到时退回点击的那一项。
+     *
+     * @return 切换成功返回新的 userid；失败抛异常（含非 1 业务码）。
+     */
+    suspend fun switchTo(item: SubAccountItem): Long {
+        val resp = ServiceLocator.subAccount.switchAccount(item.userId)
+        check(resp.isSuccess) { "切换失败（code=${resp.code}）" }
+        val newId = resp.body?.ytkUserId?.takeIf { it > 0 } ?: item.userId
+        SessionStore.saveYfdU(newId.toLong())
+        val domain = SessionStore.loadCookies()
+            .firstOrNull { it.name == "userid" }?.domain
+            ?: ".yuanfudao.com"
+        SessionStore.upsertCookie("userid", newId.toString(), domain)
+        return newId.toLong()
     }
 
     /**
@@ -204,6 +247,7 @@ data class SubAccountItem(
     val nickname: String,
     val grade: Int,
     val primaryUserId: Int,
+    val avatarUrl: String? = null,
     val isCurrent: Boolean,
     val isPrimary: Boolean,
 )

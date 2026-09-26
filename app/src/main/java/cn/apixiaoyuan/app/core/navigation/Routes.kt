@@ -79,6 +79,10 @@ data object RouteOldSimian : Route
 @Serializable
 data object RouteScorePump : Route
 
+/** 「刷 PK 对局」二级页（纯 API 刷局：出题→弧线笔迹→提交）。 */
+@Serializable
+data object RoutePkGrind : Route
+
 /** 账号页（宝贝学习账号切换 + 改密码）。 */
 @Serializable
 data object RouteAccount : Route

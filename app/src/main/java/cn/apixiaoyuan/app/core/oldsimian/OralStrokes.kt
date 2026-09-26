@@ -1,5 +1,7 @@
 package cn.apixiaoyuan.app.core.oldsimian
 
+import kotlin.random.Random
+
 /**
  * 「提交画笔」的字形库 —— 纯 Kotlin 实现，**替代 cn.nizou.sxd 的 libauto_oral.so**。
  *
@@ -148,8 +150,26 @@ object OralStrokes {
             listOf(0.20f to 0.35f, 0.80f to 0.35f),
             listOf(0.20f to 0.65f, 0.80f to 0.65f),
         ),
-        '>' to listOf(listOf(0.25f to 0.20f, 0.75f to 0.50f, 0.25f to 0.80f)),
-        '<' to listOf(listOf(0.75f to 0.20f, 0.25f to 0.50f, 0.75f to 0.80f)),
+        '>' to listOf(
+            listOf(
+                0.3004f to 0.0000f, 0.3662f to 0.0088f, 0.4594f to 0.0212f, 0.5636f to 0.0347f,
+                0.6787f to 0.0488f, 0.7939f to 0.0612f, 0.8893f to 0.0718f, 0.9496f to 0.0781f,
+                1.0000f to 0.1076f, 0.9496f to 0.2098f, 0.9046f to 0.2664f, 0.8355f to 0.3398f,
+                0.7467f to 0.4272f, 0.6524f to 0.5158f, 0.5592f to 0.6023f, 0.4649f to 0.6860f,
+                0.3739f to 0.7633f, 0.2862f to 0.8330f, 0.1985f to 0.8917f, 0.1151f to 0.9448f,
+                0.0000f to 1.0000f,
+            ),
+        ),
+        '<' to listOf(
+            listOf(
+                0.2020f to 0.0000f, 0.2636f to 0.0000f, 0.3293f to 0.0000f, 0.4051f to 0.0017f,
+                0.5030f to 0.0073f, 0.6162f to 0.0168f, 0.7273f to 0.0289f, 0.8202f to 0.0379f,
+                0.8848f to 0.0432f, 0.9566f to 0.0565f, 1.0000f to 0.1009f, 0.9586f to 0.1893f,
+                0.9212f to 0.2388f, 0.8525f to 0.3139f, 0.7424f to 0.4197f, 0.6192f to 0.5337f,
+                0.5071f to 0.6340f, 0.4081f to 0.7155f, 0.3253f to 0.7788f, 0.2556f to 0.8309f,
+                0.2040f to 0.8704f, 0.1556f to 0.9021f, 0.0697f to 0.9551f, 0.0000f to 1.0000f,
+            ),
+        ),
         '.' to listOf(listOf(0.45f to 0.70f, 0.55f to 0.70f)),
         ':' to listOf(
             listOf(0.50f to 0.30f, 0.50f to 0.35f),
@@ -238,6 +258,92 @@ object OralStrokes {
                 append(']')
             }
             append(']')
+        }
+    }
+
+    // =====================================================================
+    // PK 弧线笔迹（2026-09-26 本地验证通过：密集弧线 200，稀疏点 403）
+    // =====================================================================
+    //
+    // PK 提交的笔迹与练习不同：练习判分只看 userAnswer，笔迹只回放；但 PK 的
+    // 服务端会校验笔迹「像不像真人手写」。七段码里的 `>` / `<` 只有 3 个点
+    // （稀疏折线），被判作弊 → 403；换成 20+ 个密集点、含自然转折的弧线后
+    // 提交 200。坐标口径与真机 ground truth 一致（像素级，x 约 150..270、
+    // y 约 450..560），不是归一化 0..1。
+
+    /** PK 弧线模板：`<` 形（左上→中→右上，然后折回）。相对第一点。 */
+    private val PK_ARC_LT: List<Pair<Float, Float>> = listOf(
+        0.0f to 0.0f, 6.1f to 0.0f, 12.6f to 0.0f, 20.1f to 0.13f, 29.8f to 0.56f,
+        41.0f to 1.28f, 52.0f to 2.21f, 61.2f to 2.89f, 67.6f to 3.30f, 74.7f to 4.31f,
+        79.0f to 7.70f, 74.9f to 14.45f, 71.2f to 18.23f, 64.4f to 23.96f, 53.5f to 32.04f,
+        41.3f to 40.74f, 30.2f to 48.40f, 20.4f to 54.62f, 12.2f to 59.45f, 5.3f to 63.43f,
+        0.2f to 66.45f, -4.6f to 68.87f, -13.1f to 72.91f, -20.0f to 76.34f,
+    )
+
+    /** PK 弧线模板：`>` 形（右上→中→左上，然后折回）。相对第一点。 */
+    private val PK_ARC_GT: List<Pair<Float, Float>> = listOf(
+        0.0f to 0.0f, 6.0f to 0.67f, 14.5f to 1.62f, 24.0f to 2.65f, 34.5f to 3.73f,
+        45.0f to 4.68f, 53.7f to 5.49f, 59.2f to 5.97f, 63.8f to 8.23f, 59.2f to 16.04f,
+        55.1f to 20.37f, 48.8f to 25.98f, 40.7f to 32.66f, 32.1f to 39.44f, 23.6f to 46.05f,
+        15.0f to 52.45f, 6.7f to 58.36f, -1.3f to 63.69f, -9.3f to 68.18f, -16.9f to 72.24f,
+        -27.4f to 76.46f,
+    )
+
+    /**
+     * 生成 PK 提交用的弧线笔迹（像素坐标，像真人手写）。
+     *
+     * 与 pk_arc.py 的 `make_path` 完全对齐：模板 + 每个点 ±1.5 手抖 + 整体偏移，
+     * 让每题笔迹都不同但都像真人。PK 的 `>` / `<` 比较题只有这两种符号，
+     * 其它符号（数字等）仍回落到 [scriptJson] 的七段码字形。
+     *
+     * @param answer 答案文本（PK 比大小题通常是 `>` 或 `<`）
+     * @param seed   随机种子（同一题 seed 固定则笔迹可复现）
+     * @return 弧线笔迹点集（一笔 = 一个点数组）；非 `>` / `<` 返回 null，调用方回落。
+     */
+    fun pkArcPathPoints(answer: String, seed: Int): List<List<Pair<Float, Float>>>? {
+        val tmpl = when (answer.trim()) {
+            "<" -> PK_ARC_LT
+            ">" -> PK_ARC_GT
+            else -> return null
+        }
+        val rnd = Random(seed)
+        // 整体偏移（每题位置不同），与 pk_arc.py 同区间。
+        val ox = rnd.nextFloat() * 90f + 150f   // 150..240
+        val oy = rnd.nextFloat() * 50f + 450f   // 450..500
+        val pts = tmpl.map { (dx, dy) ->
+            val x = ox + dx + (rnd.nextFloat() * 3f - 1.5f)
+            val y = oy + dy + (rnd.nextFloat() * 3f - 1.5f)
+            x to y
+        }
+        return listOf(pts)
+    }
+
+    /** 把 PK 弧线笔迹点集序列化成 `[[{"x":..,"y":..},...]]` 的 JSON 字符串。 */
+    fun pkArcScript(answer: String, seed: Int): String? {
+        val strokes = pkArcPathPoints(answer, seed) ?: return null
+        return buildString {
+            append('[')
+            strokes.forEachIndexed { si, stroke ->
+                if (si > 0) append(',')
+                append('[')
+                stroke.forEachIndexed { pi, (x, y) ->
+                    if (pi > 0) append(',')
+                    append("{\"x\":").append(trimFloat4(x))
+                    append(",\"y\":").append(trimFloat4(y)).append('}')
+                }
+                append(']')
+            }
+            append(']')
+        }
+    }
+
+    /** 四舍五入到 4 位小数（与 pk_arc.py 的 `round(x,4)` 对齐）。 */
+    private fun trimFloat4(v: Float): String {
+        val rounded = Math.round(v * 10000f) / 10000f
+        return if (rounded == rounded.toLong().toFloat()) {
+            rounded.toLong().toString()
+        } else {
+            rounded.toString()
         }
     }
 

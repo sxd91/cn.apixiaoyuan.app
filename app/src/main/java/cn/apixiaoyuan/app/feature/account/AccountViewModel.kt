@@ -112,33 +112,11 @@ class AccountViewModel : ViewModel() {
         loading = true
         message = null
         viewModelScope.launch {
-            val result = AccountRepository.switchAccount(item.userId)
+            val result = runCatching { AccountRepository.switchTo(item) }
             loading = false
-            result.onSuccess { resp ->
-                if (resp.isSuccess) {
-                    // 「切换子账号的 cookie 应该使用登录产生的」（待办 #6）。
-                    //
-                    // 这里做两件事，缺一不可：
-                    //  1) 本地缓存 YFD_U 跟上（原本就有）；
-                    //  2) **把新身份写回 userid cookie** —— 切换响应未必带
-                    //     Set-Cookie（或带了但 jar 未落盘），不显式写一次的话，
-                    //     后续主域请求仍带旧 userid，表现为「切换了但没生效」。
-                    //     写的时候沿用原条目的 domain/path，只换 value，避免挪错域。
-                    //
-                    // 优先用响应里的 ytkUserId（服务端给的真实新身份），
-                    // 拿不到时退回点击的那一项 —— 两者一致时无差别，
-                    // 不一致时以服务端为准。
-                    val newId = resp.body?.ytkUserId?.takeIf { it > 0 } ?: item.userId
-                    SessionStore.saveYfdU(newId.toLong())
-                    val domain = SessionStore.loadCookies()
-                        .firstOrNull { it.name == "userid" }?.domain
-                        ?: ".yuanfudao.com"
-                    SessionStore.upsertCookie("userid", newId.toString(), domain)
-                    message = "已切换到「${item.nickname}」（userid=$newId）"
-                    refresh()
-                } else {
-                    message = "切换失败（code=${resp.code}）"
-                }
+            result.onSuccess { newId ->
+                message = "已切换到「${item.nickname}」（userid=$newId）"
+                refresh()
             }.onFailure {
                 message = "切换失败：${it.message ?: it}"
             }

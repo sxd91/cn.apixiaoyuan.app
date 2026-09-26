@@ -27,6 +27,20 @@ object PkBattleRepository {
     const val MIN_COST_TIME_MS = 5L
 
     /**
+     * 拉数学 PK 首页（对局类型列表 + 分数）。
+     *
+     * `GET /leo-game-pk/android/math/pk/home?grade=N` 返回明文 JSON，
+     * 这里手动 parse 成 [PkMathHome]。
+     *
+     * @param grade 年级（从 SessionStore 读，默认 2）
+     * @return 首页数据；失败抛异常。
+     */
+    suspend fun fetchMathHome(grade: Int): PkMathHome {
+        val raw = ServiceLocator.pkBattle.mathHome(grade = grade).string()
+        return json.decodeFromString<PkMathHome>(raw)
+    }
+
+    /**
      * 出题（按玩法）。
      *
      * 响应是 `@NeedDecode` 后明文 JSON 字节，这里手动 parse 成 [PkMatchResponse]。
@@ -38,10 +52,10 @@ object PkBattleRepository {
     suspend fun fetchMatch(mode: PkMode, pointId: Int): PkMatchResponse {
         val api = ServiceLocator.pkBattle
         val body = when (mode) {
-            PkMode.MATH -> api.mathMatchV2(pointId = pointId)
-            PkMode.MULTI -> api.multiMatchV2(pointId = pointId)
-            PkMode.FINAL -> api.finalMatchV2(pointId = pointId)
-            PkMode.ENGLISH -> api.englishMatchV2(pointId = pointId)
+            PkMode.MATH -> api.mathMatch(pointId = pointId)
+            PkMode.MULTI -> api.multiMatch(pointId = pointId)
+            PkMode.FINAL -> api.finalMatch(pointId = pointId)
+            PkMode.ENGLISH -> api.englishMatch(pointId = pointId)
         }
         val raw = body.string()
         return json.decodeFromString<PkMatchResponse>(raw)
@@ -68,11 +82,15 @@ object PkBattleRepository {
     /**
      * 组装「全对秒结算」提交 body。
      *
-     * - `questionCnt` = 出题题目数（**联动题目数量**，不是写死值）；
-     * - 每题 `userAnswer` = 正确答案（`answers.first()`）、`status = 1`；
-     * - 每题 `script` = `OralStrokes.scriptJson(答案)` 生成的笔迹 JSON；
-     * - `curTrueAnswer.pathPoints` = 从 script 反解出的同源结构；
-     * - 整卷 `costTime` = 题目数 × 每题的合理耗时。
+     * 结构与真机 ground truth 逐字段对齐（2026-09-26 用户实打一轮 PK 落盘的
+     * localStorage `exerciseResult`）：
+     * - 顶层直接展开 examVO 字段（pkIdStr/pointId/pointName/ruleType/
+     *   questionCnt/correctCnt/costTime/questions），无 examVO 嵌套、无 userInfos；
+     * - 每题保留完整 question 字段（id/examId/content/answer/userAnswer/answers/
+     *   status/script/wrongScript/ruleType/errorState）+ curTrueAnswer 四字段；
+     * - `script` 与 `curTrueAnswer.pathPoints` 同源（同一份笔迹）；
+     * - `correctCnt` = 对题数（全对 = 题目数）；
+     * - `costTime` = 整卷耗时（毫秒）。
      *
      * 判对错只看 `userAnswer`，笔迹只回放 —— 所以秒结算语义 = 每题答案填对即可。
      *
@@ -84,32 +102,60 @@ object PkBattleRepository {
     fun buildSubmitBody(
         match: PkMatchResponse,
         costTimeMs: Long? = null,
+        strokeMode: PkStrokeMode = PkStrokeMode.ARC,
     ): PkSubmitBody {
         val pkIdStr = match.pkIdStr
             ?: error("出题响应缺 pkIdStr")
-        val questions = match.examVO?.questions
+        val examVO = match.examVO
+            ?: error("出题响应缺 examVO")
+        val questions = examVO.questions
             ?: error("出题响应缺 examVO.questions")
 
-        val submitQuestions = questions.map { q ->
+        val submitQuestions = questions.mapIndexed { idx, q ->
             val answer = q.rightAnswer ?: ""
-            // 笔迹按「本题实际提交的答案」生成，与练习线同口径。
-            val script = OralStrokes.scriptJson(answer) ?: "[]"
+            // PK 笔迹：默认 ARC（比较题 `>` / `<` 用密集弧线，否则被服务端判作弊 403）；
+            // SEVEN_SEGMENT 时回落到七段码字形。seed 用题号，保证每题笔迹不同。
+            val script: String
+            if (strokeMode == PkStrokeMode.ARC) {
+                script = OralStrokes.pkArcScript(answer, seed = idx)
+                    ?: (OralStrokes.scriptJson(answer) ?: "[]")
+            } else {
+                script = OralStrokes.scriptJson(answer) ?: "[]"
+            }
             val pathPoints = parsePathPoints(script)
             PkSubmitQuestion(
+                id = q.id,
+                examId = q.examId,
+                content = q.content,
+                answer = q.answer,
                 userAnswer = answer,
-                script = script,
-                curTrueAnswer = PkCurTrueAnswer(pathPoints = pathPoints),
+                answers = q.answers,
                 status = PkSubmitQuestion.STATUS_RIGHT,
+                script = script,
+                wrongScript = null,
+                ruleType = q.ruleType,
+                errorState = q.errorState,
+                curTrueAnswer = PkCurTrueAnswer(
+                    recognizeResult = answer,
+                    pathPoints = pathPoints,
+                    answer = PkSubmitQuestion.STATUS_RIGHT,
+                    showReductionFraction = 0,
+                ),
             )
         }
 
         val questionCnt = submitQuestions.size
+        val correctCnt = submitQuestions.size
         val cost = costTimeMs
             ?: (questionCnt.toLong() * MIN_COST_TIME_MS).coerceAtLeast(MIN_COST_TIME_MS)
 
         return PkSubmitBody(
             pkIdStr = pkIdStr,
+            pointId = examVO.pointId,
+            pointName = examVO.pointName,
+            ruleType = examVO.ruleType,
             questionCnt = questionCnt,
+            correctCnt = correctCnt,
             costTime = cost,
             questions = submitQuestions,
         )

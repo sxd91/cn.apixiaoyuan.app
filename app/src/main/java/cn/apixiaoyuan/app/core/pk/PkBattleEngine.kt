@@ -55,6 +55,8 @@ object PkBattleEngine {
         retryBaseMs: Long = DEFAULT_RETRY_BASE_MS,
         roundIntervalMs: Long = DEFAULT_ROUND_INTERVAL_MS,
         costTimeMs: Long? = null,
+        submitDelayMs: Long = 0L,
+        strokeMode: PkStrokeMode = PkStrokeMode.ARC,
         onProgress: (PkMode, Int, Int, String) -> Unit = { _, _, _, _ -> },
     ): Map<PkMode, Int> = coroutineScope {
         require(rounds >= 1) { "轮数必须 ≥1" }
@@ -70,6 +72,8 @@ object PkBattleEngine {
                         maxRetry = maxRetry,
                         retryBaseMs = retryBaseMs,
                         costTimeMs = costTimeMs,
+                        submitDelayMs = submitDelayMs,
+                        strokeMode = strokeMode,
                         onEvent = { ev -> onProgress(mode, done, rounds, ev) },
                     )
                     if (ok) {
@@ -100,6 +104,8 @@ object PkBattleEngine {
         maxRetry: Int,
         retryBaseMs: Long,
         costTimeMs: Long?,
+        submitDelayMs: Long,
+        strokeMode: PkStrokeMode,
         onEvent: (String) -> Unit,
     ): Boolean {
         var attempt = 0
@@ -108,7 +114,11 @@ object PkBattleEngine {
                 onEvent("出题中…")
                 val match = PkBattleRepository.fetchMatch(mode, pointId)
                 onEvent("出题成功（${match.examVO?.questions?.size ?: 0} 题），组装提交…")
-                val body = PkBattleRepository.buildSubmitBody(match, costTimeMs)
+                if (submitDelayMs > 0) {
+                    onEvent("等待 ${submitDelayMs}ms 后提交…")
+                    delay(submitDelayMs)
+                }
+                val body = PkBattleRepository.buildSubmitBody(match, costTimeMs, strokeMode)
                 onEvent("提交中…")
                 PkBattleRepository.submit(mode, body)
                 onEvent("提交成功")
