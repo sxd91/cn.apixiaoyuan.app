@@ -199,6 +199,50 @@ object SessionStore {
     fun cookie(name: String): String? = loadCookies().firstOrNull { it.name == name }?.value
 
     /**
+     * 按名字写入一条 cookie（已存在则改值，不存在则新增）。
+     *
+     * ## 为什么需要它（切换子账号，待办 #6）
+     *
+     * 用户明确要求：「切换子账号的 cookie 应该使用登录产生的」。
+     *
+     * 切换成功后，服务端会通过 `Set-Cookie` 下发新的 `userid`（PersistentCookieJar
+     * 通常会自动落盘），但**主域请求是否带得上，取决于这条 cookie 的 domain/path
+     * 是否被正确改写**。若切换响应没带 `Set-Cookie`（或带了但 jar 未落盘），
+     * 后续主域请求仍用旧身份 —— 表现就是「切换了但没生效」。
+     *
+     * 因此这里提供一条显式的写路径：切换成功后把新 userId 写回 `userid` cookie，
+     * **沿用原条目的 domain/path/过期**（不改这些属性，避免把 cookie 挪错域），
+     * 只换 value。没有同名条目时按主域新建一条。
+     *
+     * @param name   cookie 名（如 `userid`）
+     * @param value  新值
+     * @param domain 无同名条目时使用的域
+     * @return 是否写入成功
+     */
+    fun upsertCookie(name: String, value: String, domain: String = ".yuanfudao.com"): Boolean {
+        val current = loadCookies().toMutableList()
+        val index = current.indexOfFirst { it.name == name }
+        if (index >= 0) {
+            val old = current[index]
+            current[index] = old.copy(value = value)
+        } else {
+            current += CookieEntry(
+                domain = domain,
+                name = name,
+                value = value,
+                path = "/",
+                expiresAt = 0L,
+                hostOnly = false,
+                httpOnly = true,
+                persistent = true,
+                secure = false,
+            )
+        }
+        saveCookies(current)
+        return true
+    }
+
+    /**
      * 当前登录用户 ID（`YFD_U` 的取值）。
      *
      * 真机确证：`userid` cookie 与 `UserVO.userId` 同值。
