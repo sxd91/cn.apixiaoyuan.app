@@ -8,6 +8,7 @@ import cn.apixiaoyuan.app.core.model.UserAccount
 import cn.apixiaoyuan.app.core.model.UserVO
 import cn.apixiaoyuan.app.core.network.ServiceLocator
 import cn.apixiaoyuan.app.core.session.SessionStore
+import android.util.Log
 
 /**
  * 账号管理数据入口：宝贝学习账号（子账号）切换 / 新建 / 删除，以及改密码。
@@ -34,6 +35,8 @@ import cn.apixiaoyuan.app.core.session.SessionStore
  */
 object AccountRepository {
 
+    /** 日志 tag。子账号链路的失败要可查，不能只靠 UI 上的「拉取失败」。 */
+    private const val TAG = "AccountRepository"
     /**
      * 当前账号的完整信息。
      *
@@ -71,12 +74,24 @@ object AccountRepository {
         // 没有设备链 → 401 leo-auth → 列表恒空（用户看到「一直闪 + 401」）。
         // 实测（2026-09-26）：context?_productId=241 用本项目登录 cookie 即 200，
         // 返回 allSubUserIds。这是无设备链时唯一能拿到子账号 ID 的通道。
-        val ctx = runCatching { ServiceLocator.subAccount.getUserInfosContext() }.getOrNull()
+        //
+        // ## 这里不再静默吞异常（2026-09-27 教训）
+        //
+        // 此前写成 `runCatching { ... }.getOrNull()`，于是一旦反序列化失败
+        // （真机确实踩到：`UserInfosContext` 漏了 `@Serializable`，
+        // kotlinx.serialization 抛 "Serializer ... is not found"），
+        // 异常被吞成 null，表面现象退化成「列表空 + 401」，
+        // 完全看不出真因。现在失败时打日志，保留可诊断性。
+        val ctx = runCatching { ServiceLocator.subAccount.getUserInfosContext() }
+            .onFailure { Log.w(TAG, "context 拉取/解析失败（子账号 ID 列表将为空）", it) }
+            .getOrNull()
         val ids = ctx?.allSubUserIds?.map { it.toInt() }?.distinct()
 
         // 第二步：拿名字头像 —— batchGet（需设备链）。
         // 失败不致命：降级为只显示 uid，至少让用户看到有几个账号、能切换。
+        // 401 是**预期内**的（本项目自身登录无设备链），因此只记不抛。
         val voById = runCatching { ServiceLocator.subAccount.getSubAccounts() }
+            .onFailure { Log.i(TAG, "batchGet 不可用（无设备链，降级显示 uid）：${it.message}") }
             .getOrNull()
             ?.associateBy { it.userId }
             ?: emptyMap()

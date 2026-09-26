@@ -8,6 +8,7 @@ import cn.apixiaoyuan.app.core.network.BASE_YTK
 import cn.apixiaoyuan.app.core.network.BaseUrl
 import cn.apixiaoyuan.app.core.network.CheckNothing
 import cn.apixiaoyuan.app.core.network.GsonConverter
+import kotlinx.serialization.Serializable
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
@@ -217,7 +218,20 @@ typealias SubAccountVO = cn.apixiaoyuan.app.core.model.UserVO
  * `GET /leo-profile/api/user-infos/context` 的响应。
  *
  * [allSubUserIds] 即当前物理账号名下的**全部子账号 ID**（含主账号自己）。
+ *
+ * ## `@Serializable` 是必需的，不是装饰（2026-09-27 真机坑）
+ *
+ * 本工程的 Retrofit 只装了 `kotlinx.serialization` converter
+ * （`RetrofitFactory`：`json.asConverterFactory(...)`）。**没有** `@Serializable`
+ * 的类在反序列化时会直接抛
+ * `Serializer for class 'UserInfosContext' is not found`。
+ *
+ * 此��本类没加该注解，且调用处 `AccountRepository.fetchSubAccounts` 用
+ * `runCatching { ... }.getOrNull()` 包裹 —— 异常被静默吞成 `null`，
+ * 于是「context 明明 200 返回了 3 个 ID，界面却恒空 + 报 401」。
+ * 401 其实是第二步 `batchGet`（需设备链）的真实失败，被误当作主因。
  */
+@Serializable
 data class UserInfosContext(
     val deviceId: Long = 0L,
     val originUserId: Long = 0L,
