@@ -40,6 +40,10 @@ class PkGrindViewModel : ViewModel() {
     var subAccounts by mutableStateOf<List<SubAccountItem>?>(null)
         private set
 
+    /** 子账号列表加载失败原因。null = 无错误（可能只是没有小号）。 */
+    var subAccountsError by mutableStateOf<String?>(null)
+        private set
+
     var running by mutableStateOf(false)
         private set
 
@@ -59,6 +63,7 @@ class PkGrindViewModel : ViewModel() {
         if (loading) return
         loading = true
         loadError = null
+        subAccountsError = null
         currentUserId = SessionStore.yfdU
         viewModelScope.launch {
             try {
@@ -67,8 +72,12 @@ class PkGrindViewModel : ViewModel() {
                 points = home.pointList
                 totalWinCount = home.totalWinCount
                 weekWinCount = home.weekWinCount
-                subAccounts = runCatching { AccountRepository.fetchSubAccounts().getOrThrow() }
-                    .getOrNull()
+                runCatching { AccountRepository.fetchSubAccounts() }
+                    .onSuccess { subAccounts = it.getOrNull() }
+                    .onFailure { t ->
+                        subAccounts = null
+                        subAccountsError = "子账号需设备链登录态：${t.message ?: t}"
+                    }
             } catch (t: Throwable) {
                 if (t !is CancellationException) {
                     loadError = "拉取对局类型失败：${t.message ?: t}"

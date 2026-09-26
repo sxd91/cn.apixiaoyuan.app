@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,7 +21,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.apixiaoyuan.app.core.account.SubAccountItem
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.navigation.AppNavController
-import cn.apixiaoyuan.app.core.pk.PkPointItem
 import cn.apixiaoyuan.app.core.pk.PkStrokeMode
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -51,7 +48,6 @@ fun PkGrindScreen(
 
     AppScrollScaffold(title = "刷 PK 对局", onBack = { navController.popBackStack() }) {
         Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SectionCard(title = "账号") {
@@ -60,12 +56,19 @@ fun PkGrindScreen(
                     color = MiuixTheme.colorScheme.onSurfaceContainer,
                 )
                 val subs = viewModel.subAccounts
-                if (subs.isNullOrEmpty()) {
+                viewModel.subAccountsError?.let { err ->
                     Text(
-                        text = "无子账号（或未登录）",
+                        text = err,
+                        color = MiuixTheme.colorScheme.error,
+                    )
+                }
+                if (subs.isNullOrEmpty() && viewModel.subAccountsError == null) {
+                    Text(
+                        text = "无子账号",
                         color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
                     )
-                } else {
+                }
+                if (!subs.isNullOrEmpty()) {
                     subs.forEach { item ->
                         Row(
                             modifier = Modifier

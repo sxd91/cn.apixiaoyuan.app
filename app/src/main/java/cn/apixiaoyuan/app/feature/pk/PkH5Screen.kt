@@ -422,23 +422,38 @@ private fun releaseWebView(view: WebView) {
  */
 private fun syncCookiesToWebView(pageUrl: String) {
     val cm = CookieManager.getInstance()
-    val fallbackHost = runCatching { java.net.URI(pageUrl).host }.getOrNull()
+    // PK H5 页面的实际 host。cookie 必须落到这个 host 下（或它的父域），
+    // WebView 发请求时才按 RFC 6265 匹配得上。
+    val pageHost = runCatching { java.net.URI(pageUrl).host }.getOrNull()
+        ?: "xyks.yuanfudao.com"
 
     SessionStore.loadCookies().forEach { entry ->
         if (entry.value.isEmpty()) return@forEach
 
-        val host = entry.domain.removePrefix(".").ifEmpty { fallbackHost ?: return@forEach }
+        // ★ 关键修复（2026-09-26）：cookie domain 必须带前导点，
+        // 否则 CookieManager 会把它当 host-only cookie，只匹配裸域
+        // `yuanfudao.com`，**不匹配** `xyks.yuanfudao.com` → PK H5 表现为未登录。
+        //
+        // 原版 WebView 的 cookie host_key 实测全是 `.yuanfudao.com`（带前导点，
+        // domain cookie，匹配所有子域）；而 App 的 SessionStore 存的是
+        // `yuanfudao.com`（无前导点，host-only）。这里统一补前导点，
+        // 与真机地面真值对齐。
+        val rawDomain = entry.domain.removePrefix(".")
+        // 统一补前导点：domain cookie 才能匹配所有子域。
+        val domain = ".$rawDomain"
 
         val cookieString = buildString {
             append(entry.name).append('=').append(entry.value)
-            append("; domain=").append(host)
+            append("; domain=").append(domain)
             append("; path=").append(entry.path.ifEmpty { "/" })
             if (entry.expiresAt > 0L) {
                 append("; expires=").append(httpDate(entry.expiresAt))
             }
             if (entry.secure) append("; Secure")
         }
-        cm.setCookie("https://$host", cookieString)
+        // setCookie 的 URL 必须用 PK H5 实际 host（xyks.yuanfudao.com），
+        // 这样带前导点的 domain cookie 才会被登记为「匹配该 host 及其子域」。
+        cm.setCookie("https://$pageHost", cookieString)
     }
     cm.flush()
 }

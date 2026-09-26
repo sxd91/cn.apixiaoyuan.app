@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 启动器图标背景：深蓝紫，与白色笔形成对比。
+         monochrome 层负责莫奈取色，背景保持品牌色。 -->
+    <color name="ic_launcher_background">#1A1B2E</color>
+</resources>
