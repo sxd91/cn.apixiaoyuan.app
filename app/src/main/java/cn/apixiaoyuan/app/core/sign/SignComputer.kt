@@ -73,6 +73,17 @@ object SignComputer {
     /** `libRequestEncoder.so` 的 JNI_OnLoad 相对偏移。 */
     private const val CHAIN_OFFSET = 0x4078
 
+    /** 内置 so 文件名。 */
+    private const val SO_NAME = "libRequestEncoder.so"
+
+    /**
+     * 内置 so 的字节数（设备运行版）。
+     *
+     * 用作「取到的文件对不对」的校验 —— so 版本与偏移强绑定，
+     * 换版必须同时改 [CHAIN_OFFSET]，这里用大小兜住换版漏改的情况。
+     */
+    private const val SO_SIZE = 919_600L
+
     @Volatile
     private var ready = false
 
@@ -101,15 +112,64 @@ object SignComputer {
             false
         }
         if (!loaded) return false
-        val so = File(context.applicationInfo.nativeLibraryDir, "libRequestEncoder.so")
-        if (!so.exists()) {
-            Log.w(TAG, "libRequestEncoder.so not found at ${so.absolutePath}")
+        val so = extractRequestEncoder(context)
+        if (so == null) {
+            Log.w(TAG, "libRequestEncoder.so unavailable (not extracted and not in apk)")
             return false
         }
         val ok = nativeInit(so.absolutePath) && nativeReady()
         ready = ok
         Log.i(TAG, "init ok=$ok (so=${so.absolutePath}, chainOffset=0x${CHAIN_OFFSET.toString(16)})")
         return ok
+    }
+
+    /**
+     * 取到可 dlopen 的 `libRequestEncoder.so`。
+     *
+     * AGP 默认 `extractNativeLibs=false`：so 以压缩形式留在 APK 里，
+     * **不会**解压到 `nativeLibraryDir`（实测该目录为空目录）。
+     * 因此不能只认 `nativeLibraryDir`，必须回退到「从 APK 里取出」。
+     *
+     * 取法：优先用已解压的文件；没有则从 `applicationInfo.sourceDir`
+     * （split APK 场景下退到 `splitSourceDirs` 里找）读出 lib/arm64-v8a 条目，
+     * 落到 `filesDir/native/` 后再用。已存在则直接复用，避免每次启动重复解压。
+     *
+     * @return 可 dlopen 的文件；全部失败时返回 null。
+     */
+    private fun extractRequestEncoder(context: Context): File? {
+        // 1) 已解压的情况（extractNativeLibs=true 或部分 ROM 会解压）
+        val dir = File(context.applicationInfo.nativeLibraryDir)
+        val direct = File(dir, SO_NAME)
+        if (direct.exists() && direct.length() == SO_SIZE) return direct
+
+        // 2) 已缓存到私有目录
+        val cache = File(context.filesDir, "native/$SO_NAME")
+        if (cache.exists() && cache.length() == SO_SIZE) return cache
+
+        // 3) 从 APK 里解压
+        val sources = buildList {
+            context.applicationInfo.sourceDir?.let { add(File(it)) }
+            context.applicationInfo.splitSourceDirs?.forEach { add(File(it)) }
+        }
+        for (apk in sources) {
+            if (!apk.exists()) continue
+            val out = runCatching {
+                java.util.zip.ZipFile(apk).use { zip ->
+                    val entry =
+                        zip.getEntry("lib/arm64-v8a/$SO_NAME") ?: return@use null
+                    cache.parentFile?.mkdirs()
+                    zip.getInputStream(entry).use { input ->
+                        cache.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    cache
+                }
+            }.getOrNull()
+            if (out != null) {
+                Log.i(TAG, "extracted $SO_NAME from ${apk.name} -> ${out.absolutePath}")
+                return out
+            }
+        }
+        return null
     }
 
     /**

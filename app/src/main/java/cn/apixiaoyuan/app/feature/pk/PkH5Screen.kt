@@ -69,7 +69,8 @@ fun PkH5Screen(
     onFinish: () -> Unit = {},
 ) {
     
-    // WebView 实例在 composition 期间创建，DisposableEffect 负责销毁。
+    // WebView 实例在 composition 期间创建；销毁由 AndroidView 的 onRelease
+    // 负责（不能放 DisposableEffect.onDispose，详见下方 AndroidView 注释）。
     val context = LocalContext.current
     val webView = remember {
         WebView(context).apply {
@@ -140,8 +141,11 @@ fun PkH5Screen(
     
     DisposableEffect(Unit) {
         onDispose {
-            webView.stopLoading()
-            webView.destroy()
+            // 注意：这里**不能** destroy WebView —— 销毁已移交给 AndroidView 的
+            // onRelease（见下方 AndroidView）。onDispose 与合成同帧同步执行，
+            // 此时 WebView 正在被移出视图树，destroy 会与 requestFocus 重入竞争
+            // 导致 Compose 运行时崩溃。这里只做非破坏性的停止加载。
+            runCatching { webView.stopLoading() }
         }
     }
     
@@ -186,6 +190,13 @@ fun PkH5Screen(
                         view.loadUrl(viewModel.h5Url)
                     }
                 },
+                // 销毁必须交给 AndroidView 的 onRelease：它在 View 被移出视图树
+                // **之后**才回调。此前放在 DisposableEffect(Unit).onDispose 里会崩：
+                // 返回时 Compose 先 removeViewInLayout 摘掉 WebView，摘除过程触发
+                // requestFocus → 重入合成；而 onDispose 与合成同帧同步执行 destroy()，
+                // 两者竞争抛出 "pending composition has not been applied"
+                // （真机崩溃栈底：ViewGroup.removeViewInLayout → ... → requestFocus）。
+                onRelease = { view -> releaseWebView(view) },
             )
         }
         
@@ -221,6 +232,32 @@ fun PkH5Screen(
     }
 }
 
+/**
+ * 安全销毁 WebView（由 AndroidView 的 onRelease 调用，此时 View 已移出视图树）。
+ *
+ * 顺序是有讲究的，真机崩溃倒逼出的三条：
+ *
+ *  1. **先从父容器摘除**。onRelease 时通常已被摘除，但若 View 仍挂在某个
+ *     ViewGroup 上，直接 destroy 会让父容器在后续布局/焦点遍历中碰到已销毁的
+ *     实例。用 runCatching 包住是因为"已不在树里"是常态，抛异常无意义。
+ *  2. **清空回调与 JS 开关**。webViewClient 持有 viewModel 与 onFinish 引用，
+ *     不清会让整棵 Activity 泄漏到 WebView 的内部线程；同时关掉 JS 阻断
+ *     页面里还在跑的定时器继续回调原生。
+ *  3. **stopLoading 再 destroy**。destroy 前必须停掉未完成的加载，否则
+ *     网络线程回调已销毁的 WebView 会触发 native 层崩溃（chromium）。
+ *
+ * 整个流程用 runCatching 兜底：销毁阶段的任何异常都不该升级成用户可见的崩溃。
+ */
+private fun releaseWebView(view: WebView) {
+    runCatching {
+        view.stopLoading()
+        view.webViewClient = WebViewClient()
+        view.settings.javaScriptEnabled = false
+        (view.parent as? android.view.ViewGroup)?.removeView(view)
+        view.removeAllViews()
+        view.destroy()
+    }
+}
 /**
  * 把 [SessionStore] 里的登录态 cookie 同步进 WebView 的 CookieManager。
  *
