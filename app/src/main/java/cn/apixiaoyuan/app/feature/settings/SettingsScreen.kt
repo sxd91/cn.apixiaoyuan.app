@@ -30,7 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.border
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.design.component.LocalScrollBottomLimit
 import cn.apixiaoyuan.app.core.design.theme.PageTransitionAnimation
@@ -64,7 +64,7 @@ import kotlinx.serialization.json.Json
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(navController: NavHostController) {
+fun SettingsScreen(navController: AppNavController) {
     // 导出/导入的结果提示。SAF 是异步回调，提示必须落在状态里。
     var transferHint by remember { mutableStateOf<String?>(null) }
 

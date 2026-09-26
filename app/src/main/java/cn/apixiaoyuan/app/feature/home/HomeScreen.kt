@@ -30,10 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.App
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.design.icon.AppIcons
+import cn.apixiaoyuan.app.core.navigation.Route
 import cn.apixiaoyuan.app.core.navigation.RouteAccount
 import cn.apixiaoyuan.app.core.navigation.RouteExercise
 import cn.apixiaoyuan.app.core.navigation.RouteLogin
@@ -58,7 +59,7 @@ import com.materialkolor.dynamiccolor.ColorSpec
  * 这里只做 navigate 触发，不改导航图。
  */
 @Composable
-fun HomeScreen(navController: NavHostController) {
+fun HomeScreen(navController: AppNavController) {
     AppScrollScaffold(title = "逆向系老挂", onBack = null) {
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -116,7 +117,7 @@ private data class QuickEntry(
     val label: String,
     val iconKey: String,
     val subtitle: String,
-    val route: Any,
+    val route: Route,
 )
 
 /**

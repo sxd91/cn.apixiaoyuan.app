@@ -32,7 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 
 /**
@@ -57,7 +57,7 @@ import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
  */
 @Composable
 fun LoginScreen(
-    navController: NavHostController,
+    navController: AppNavController,
     viewModel: LoginViewModel = viewModel(),
 ) {
     LaunchedEffect(viewModel.loggedIn) {

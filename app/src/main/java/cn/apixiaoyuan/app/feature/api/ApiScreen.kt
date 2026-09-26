@@ -24,7 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.design.component.AppScaffold
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 
@@ -39,7 +39,7 @@ import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
  */
 @Composable
 fun ApiScreen(
-    navController: NavHostController,
+    navController: AppNavController,
     viewModel: ApiViewModel = viewModel(),
 ) {
     val selected = viewModel.selected

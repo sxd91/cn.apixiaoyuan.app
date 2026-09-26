@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 
 /**
@@ -32,7 +32,7 @@ import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
  * 内容可以滑到底部被底栏遮住，这正是玻璃透明感成立的前提。
  */
 @Composable
-fun ReplScreen(navController: NavHostController, viewModel: ReplViewModel = viewModel()) {
+fun ReplScreen(navController: AppNavController, viewModel: ReplViewModel = viewModel()) {
     AppScrollScaffold(title = "请求台", onBack = null) {
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),

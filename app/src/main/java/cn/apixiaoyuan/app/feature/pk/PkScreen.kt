@@ -11,7 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.navigation.RouteHome
 
 /**
@@ -28,7 +28,7 @@ import cn.apixiaoyuan.app.core.navigation.RouteHome
  */
 @Composable
 fun PkScreen(
-    navController: NavHostController,
+    navController: AppNavController,
     viewModel: PkViewModel = viewModel(),
 ) {
     // 进页面拉一次入口数据；H5 不依赖它，拉失败也照常加载。

@@ -24,7 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.account.SubAccountItem
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
@@ -58,7 +58,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  */
 @Composable
 fun AccountScreen(
-    navController: NavHostController,
+    navController: AppNavController,
     viewModel: AccountViewModel = viewModel(),
 ) {
     var deleteTarget by remember { mutableStateOf<SubAccountItem?>(null) }

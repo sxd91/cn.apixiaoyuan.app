@@ -1,158 +1,94 @@
 package cn.apixiaoyuan.app.core.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.toRoute
 import cn.apixiaoyuan.app.core.design.theme.PageTransitionPrefs
-import cn.apixiaoyuan.app.feature.account.AccountScreen
-import cn.apixiaoyuan.app.feature.api.ApiScreen
-import cn.apixiaoyuan.app.feature.exercise.ExamScreen
-import cn.apixiaoyuan.app.feature.exercise.ExerciseScreen
-import cn.apixiaoyuan.app.feature.home.HomeScreen
-import cn.apixiaoyuan.app.feature.login.LoginScreen
-import cn.apixiaoyuan.app.feature.oldsimian.OldSimianScreen
-import cn.apixiaoyuan.app.feature.oldsimian.ScorePumpScreen
-import cn.apixiaoyuan.app.feature.pk.PkScreen
-import cn.apixiaoyuan.app.feature.repl.ReplScreen
-import cn.apixiaoyuan.app.feature.samples.SamplesScreen
-import cn.apixiaoyuan.app.feature.settings.SettingsScreen
-import kotlinx.serialization.Serializable
-
-// ---- 路由定义（@Serializable object，供 navigation-compose 类型安全导航）----
-
-@Serializable
-object RouteHome
-
-@Serializable
-object RouteApi
-
-@Serializable
-object RouteRepl
-
-@Serializable
-object RouteSamples
-
-@Serializable
-object RoutePk
-
-@Serializable
-object RouteExercise
+import cn.apixiaoyuan.app.core.navigation.transition.appNavTransition
+import cn.apixiaoyuan.app.core.navigation.transition.rememberAppNavEffects
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.transition.NavSwipeDirection
 
 /**
- * 答题页路由。
+ * 应用导航宿主 —— **miuix-nav 的 `NavDisplay`**（不是 androidx `NavHost`）。
  *
- * 类型安全路由带参（navigation-compose 2.8+ 的 `@Serializable data class`），
- * 三个参数全部来自练习页当前选择：
- *  - [keypointId] 知识点 ID
- *  - [limit]      题目数量，取自 `ExerciseType.chooseNumArray`
- *  - [title]      知识点名，仅用于顶栏展示
- */
-@Serializable
-data class RouteExam(
-    val keypointId: Int,
-    val limit: Int,
-    val title: String,
-)
-
-@Serializable
-object RouteLogin
-@Serializable
-object RouteSettings
-
-/**
- * 「老挂戏老叟」功能页路由。
+ * ## 这是一个「单一 NavDisplay」
  *
- * 从设置页的入口进入，是二级页（不带参）。
- * 页面自身用本项目 AppScaffold + miuix 组件搭建，与参考项目 cn.nizou.sxd
- * 的页面无任何复用关系。
- */
-@Serializable
-object RouteOldSimian
-
-/**
- * 「自定义分数（刷分）」二级页路由。
+ * 全应用只有一个返回栈、一个 `NavDisplay`。原因见
+ * [cn.apixiaoyuan.app.MainActivity] 的 KDoc：miuix 的 `NavDisplay` 内部自己注册
+ * 预测性返回（`PredictiveBackHandlerWithSessions(enabled = backStack.size > 1)`），
+ * 四个 Tab 各挂一个会互相抢手势。
  *
- * 从「老挂戏老叟」页的「自定义分数」行进入。单独成页而不是塞进
- * 「老挂戏老叟」页：刷分页有一组输入框 + 运行状态 + 起停按钮，塞进设置页
- * 会让那一页从「开关列表」变成「带状态机的表单」，两者节奏完全不同。
- */
-@Serializable
-object RouteScorePump
-
-/**
- * 账号页路由（宝贝学习账号切换 + 改密码）。
+ * ## 根 entry 由调用方提供
  *
- * 从首页的用户卡片进入 —— 用户明确要求「账号切换等功能的下级页面点击主页的
- * 用户卡片即可进入」。
- */
-@Serializable
-object RouteAccount
-
-
-/**
- * 全应用导航图。
+ * 四个 Tab 根路由**都必须注册 entry**（栈里出现的 key 必须有渲染者），
+ * 但真正占屏幕的是 `RouteHome` 这个「根 entry」——里面放 `HorizontalPager`，
+ * 由 pager 负责切 Tab（同层平移，不压栈）。`RouteApi` / `RouteRepl` /
+ * `RouteSettings` 的 entry 只在「栈里恰好是它们」时被渲染（正常操作不会发生，
+ * 因为切 Tab 走 pager；保留它们是为了栈状态被恢复时也安全）。
  *
- * 十一个入口中，四项占据 LiquidGlassTabBar 底栏位置：
- *  - 首页   -> RouteHome
- *  - 接口   -> RouteApi
- *  - 请求台 -> RouteRepl
- *  - 设置   -> RouteSettings
- * 其余七项（样本库、PK、练习、练习答题页、登录、老挂戏老叟、刷分页）是二级页，
- * 从首页快捷入口 / 设置页进入，不占底栏位置，通过 navController.navigate 直达。
- *
- * **底栏只在四个 Tab 根页显示**（判据在 `MainActivity.AppShell`，用
- * `NavDestination.hasRoute` 逐个比对）—— 二级页进入后底栏淡出，不再悬在
- * 页面底部遮挡内容。
- *
- * 四条转场（enter / exit / popEnter / popExit）由
- * [cn.apixiaoyuan.app.core.design.theme.PageTransitionPrefs.animation] 驱动，
- * 可选 Miuix（默认）/ AOSP，见 [pageTransitionsFor]。
+ * @param navController 唯一的导航器（见 [rememberAppNavController]）。
+ * @param root 根内容（四个 Tab 的 pager）。
  */
 @Composable
 fun AppNavHost(
-    navController: NavHostController,
-    modifier: Modifier = Modifier,
-    startDestination: Any = RouteHome,
+    navController: AppNavController,
+    root: @Composable () -> Unit,
 ) {
-    // 过渡动画随设置实时切换：PageTransitionPrefs.animation 是 Compose 可观察状态，
-    // 设置页改一下这里就重组，NavHost 用新的转场 —— 不需要重启 Activity。
-    //
-    // 注意：这四条转场**只作用于二级页**。四个 Tab 根页之间的切换改由
-    // MainActivity 的 HorizontalPager 负责（整屏水平平移，老挂戏老叟同款），
-    // 不走这里 —— Tab 是同层替换，用 push 的滑动转场会让人误以为进了下一级。
-    val transitions = pageTransitionsFor(PageTransitionPrefs.animation)
-    NavHost(
-        navController = navController,
-        startDestination = startDestination,
-        modifier = modifier.fillMaxSize(),
-        enterTransition = transitions.enter,
-        exitTransition = transitions.exit,
-        popEnterTransition = transitions.popEnter,
-        popExitTransition = transitions.popExit,
-    ) {
-        composable<RouteHome> { HomeScreen(navController) }
-        composable<RouteApi> { ApiScreen(navController) }
-        composable<RouteRepl> { ReplScreen(navController) }
-        composable<RouteSamples> { SamplesScreen(navController) }
-        composable<RoutePk> { PkScreen(navController) }
-        composable<RouteExercise> { ExerciseScreen(navController) }
-        composable<RouteExam> { entry ->
-            val route = entry.toRoute<RouteExam>()
-            ExamScreen(
-                navController = navController,
-                keypointId = route.keypointId,
-                limit = route.limit,
-                title = route.title,
-            )
+    // transition / effects 都随设置项实时切换：两者内部读的是 Compose 可观察
+    // 状态（PageTransitionPrefs.animation），设置页改一下这里就重组 —— 不需要重启。
+    val transition = appNavTransition(PageTransitionPrefs.animation)
+    val effects = rememberAppNavEffects()
+    val backdropColor = MaterialTheme.colorScheme.surfaceContainer
+
+    CompositionLocalProvider(LocalAppNavController provides navController) {
+        NavDisplay(
+            backStack = navController.backStack,
+            onBack = { navController.popBackStack() },
+            transition = transition,
+            effects = effects,
+            modifier = Modifier
+                .fillMaxSize()
+                // 转场层底色：被覆盖页与进场页之间不能露黑（圆角裁切时会看到
+                // 边角），用主题的 surfaceContainer —— 与二级页 Scaffold 同色。
+                .background(backdropColor),
+        ) {
+            entry<RouteHome> { root() }
+            entry<RouteApi> { root() }
+            entry<RouteRepl> { root() }
+            entry<RouteSettings> { root() }
+            entry<RouteSamples>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                cn.apixiaoyuan.app.feature.samples.SamplesScreen(navController)
+            }
+            entry<RoutePk>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                cn.apixiaoyuan.app.feature.pk.PkScreen(navController)
+            }
+            entry<RouteExercise>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                cn.apixiaoyuan.app.feature.exercise.ExerciseScreen(navController)
+            }
+            entry<RouteExam>(swipeDismiss = NavSwipeDirection.LeftToRight) { key ->
+                cn.apixiaoyuan.app.feature.exercise.ExamScreen(
+                    navController = navController,
+                    keypointId = key.keypointId,
+                    limit = key.limit,
+                    title = key.title,
+                )
+            }
+            entry<RouteLogin>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                cn.apixiaoyuan.app.feature.login.LoginScreen(navController)
+            }
+            entry<RouteOldSimian>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                cn.apixiaoyuan.app.feature.oldsimian.OldSimianScreen(navController)
+            }
+            entry<RouteScorePump>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                cn.apixiaoyuan.app.feature.oldsimian.ScorePumpScreen(navController)
+            }
+            entry<RouteAccount>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                cn.apixiaoyuan.app.feature.account.AccountScreen(navController)
+            }
         }
-        composable<RouteLogin> { LoginScreen(navController) }
-        composable<RouteSettings> { SettingsScreen(navController) }
-        composable<RouteOldSimian> { OldSimianScreen(navController) }
-        composable<RouteScorePump> { ScorePumpScreen(navController) }
-        composable<RouteAccount> { AccountScreen(navController) }
     }
 }

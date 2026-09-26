@@ -27,7 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.model.ExamData
 import cn.apixiaoyuan.app.core.model.ExamQuestion
@@ -56,7 +56,7 @@ import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
  */
 @Composable
 fun ExamScreen(
-    navController: NavHostController,
+    navController: AppNavController,
     keypointId: Int,
     limit: Int,
     title: String,

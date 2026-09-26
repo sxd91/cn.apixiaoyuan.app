@@ -22,7 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.AppNavController
 import cn.apixiaoyuan.app.core.design.component.AppScrollScaffold
 import cn.apixiaoyuan.app.core.oldsimian.OldSimianPrefs
 import cn.apixiaoyuan.app.core.oldsimian.ScorePump
@@ -55,7 +55,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  */
 @Composable
 fun ScorePumpScreen(
-    navController: NavHostController,
+    navController: AppNavController,
     viewModel: ScorePumpViewModel = viewModel(),
 ) {
     // 输入框初值取 prefs（上次的配置），本地状态不直接绑 prefs ——
