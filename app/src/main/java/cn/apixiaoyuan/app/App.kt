@@ -92,6 +92,11 @@ class App : Application() {
         // 任何标注 @NeedEncode 的请求（练习成绩上传）发出之前就绪。
         // 编码顺序为 gzip 压缩后再走 native c()，与解码侧完全互逆。
         NativeEncodeInstaller.install()
+        // 签名计算器：加载内置 libRequestEncoder.so，按 JNI_OnLoad+0x4078 调 chain。
+        // 必须在 RetrofitFactory.init 之后、任何主域请求之前 —— CommonQueryInterceptor
+        // 依赖它给主域 URL 补 `sign`（缺 sign 一律 417 x-block-by: solar-encoder）。
+        // so 加载失败时静默降级（不补 sign），不阻断启动。
+        cn.apixiaoyuan.app.core.sign.SignComputer.init(this)
 
         // 数据库：模块 12-13。八表实体 + SampleDao + AppDatabase。
         // 只建库不迁数据，初始化无副作用；放最后，不干扰网络与会话链路。

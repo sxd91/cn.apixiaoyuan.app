@@ -2,6 +2,7 @@ package cn.apixiaoyuan.app.core.network
 
 import okhttp3.Interceptor
 import okhttp3.Response
+import cn.apixiaoyuan.app.core.sign.SignComputer
 
 /**
  * 主域公共查询参数拦截器（`_productId` / `platform` / `version` / `vendor` / `av`
@@ -29,18 +30,24 @@ import okhttp3.Response
  * | 仅 `_productId` | 417 |
  * | 无参数 | 417 |
  *
- * ## 关于 `sign`（**尚未复刻，如实标注**）
+ * ## 关于 `sign`（已复刻，2026-09-26）
  *
- * `sign` 是 32 位小写 MD5 hex。已确证的**性质**：
- *  - **是 `(路径, 参数集)` 的纯函数** —— 19/19 个真机样本中，
- *    同一 `(path, 参数集)` 的 sign 完全一致，零随机性，**与时间戳、
- *    cookie、会话全无关**（同一 URL 多次出现 sign 相同）；
- *  - 已尝试 2850 种候选输入形态（path/query 各种拼接顺序、10 种候选盐、
- *    md5/sha1/sha256）**全部未命中**，说明算法含未知盐值或特殊序列化。
+ * `sign` 是 32 位小写 MD5 hex，注入键为 `SIGN`（原版 `Lvp/d;->f`，逐字保留）。
+ * 原版调用链已由 dex 交叉引用 + native 反汇编双证：
  *
- * 本拦截器**不生成 sign**，只负责补可确定的公共参数。缺 `sign` 时主域
- * 业务端点仍会 417 —— 这是当前明确的已知阻塞，不假装解决。
- * 见 [cn.apixiaoyuan.app.core.network.api.LeoMathApiService] 的 KDoc。
+ * ```
+ * Lcq/o;->intercept(chain)                    // OkHttp 拦截器
+ *   path = url.encodedPath()                  // 只有 path，不含 query
+ *   sign = e.zcvsd1wr2t(path, "wdi4n2t8edr", ts)   // ts = prefs["time.delta"]/1000，默认 0
+ *   url.addQueryParameter("SIGN", sign)
+ * ```
+ *
+ * `zcvsd1wr2t` 是 `libRequestEncoder.so` 内动态注册的 native 方法。本工程内置该 so，
+ * 由 [SignComputer] 按 `JNI_OnLoad + 0x4078` 直接调用其 chain 函数计算 —— 精确、
+ * 零算法复刻风险（chain 内部形态见 [SignComputer] 的 KDoc）。
+ *
+ * 缺 `sign` 时主域业务端点仍会 417 `x-block-by: solar-encoder`；so 加载失败时本拦截器
+ * 静默跳过（不补 sign），不阻断请求。
  *
  * ## 与原版的一致性
  *
@@ -59,18 +66,14 @@ class CommonQueryInterceptor(
     private val appVersionName: String,
     private val sdkInt: Int = android.os.Build.VERSION.SDK_INT,
 ) : Interceptor {
-
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val url = request.url
-
         // 只处理主域（`xyks.yuanfudao.com`）。
         // 账号域（`ape-api.yuanfudao.com`）实测不需要这组参数，加了会干扰。
         if (url.host != LEO_HOST) return chain.proceed(request)
-
         // 已经带过就跳过（幂等：重试 / 重定向时不重复追加）。
         if (url.queryParameter(PARAM_PRODUCT_ID) != null) return chain.proceed(request)
-
         val newUrl = url.newBuilder()
             .addQueryParameter(PARAM_PRODUCT_ID, PRODUCT_ID)
             .addQueryParameter(PARAM_PLATFORM, "android$sdkInt")
@@ -80,8 +83,15 @@ class CommonQueryInterceptor(
             .addQueryParameter(PARAM_DEVICE_CATEGORY, DEVICE_CATEGORY)
             .addQueryParameter(PARAM_WEBVIEW_VERSION, WEBVIEW_VERSION)
             .addQueryParameter(PARAM_WH_RATIO, WH_RATIO)
+            // sign 必须最后追加：算法输入是 url.encodedPath()（只有 path，不含 query），
+            // 因此顺序不影响 sign 本身；放最后只是为了让抓包日志里 sign 醒目。
+            .also { builder ->
+                val sign = SignComputer.sign(url.encodedPath)
+                if (sign != null) {
+                    builder.addQueryParameter(PARAM_SIGN, sign)
+                }
+            }
             .build()
-
         return chain.proceed(request.newBuilder().url(newUrl).build())
     }
 
@@ -106,6 +116,9 @@ class CommonQueryInterceptor(
         const val PARAM_DEVICE_CATEGORY = "deviceCategory"
         const val PARAM_WEBVIEW_VERSION = "webviewVersion"
         const val PARAM_WH_RATIO = "whRatio"
+
+        /** 签名参数名。原版 `Lvp/d;->f` 注入时用的键，逐字保留（大小写敏感）。 */
+        const val PARAM_SIGN = "SIGN"
 
         /** 真机抓包固定值。 */
         const val VENDOR = "UC"

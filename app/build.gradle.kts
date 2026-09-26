@@ -51,6 +51,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L")
+        // native 只做 arm64-v8a：内置的 libRequestEncoder.so / libc++_shared.so 均为 arm64。
+        ndk { abiFilters += listOf("arm64-v8a") }
+        externalNativeBuild {
+            cmake {
+                // signbridge 桥接库（cpp/sign_jni.cpp + call_shim.S）
+                cppFlags += listOf("-fexceptions", "-frtti")
+            }
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
     }
 
     buildTypes {
