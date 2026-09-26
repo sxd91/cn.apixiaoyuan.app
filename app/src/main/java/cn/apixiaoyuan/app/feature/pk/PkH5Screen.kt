@@ -185,6 +185,12 @@ fun PkH5Screen(
                 factory = { webView },
                 modifier = Modifier.fillMaxSize(),
                 update = { view ->
+                    // Cookie 同步放在 update 而不是只在 remember 里做一次：
+                    // 登录可能发生在进入 PK 页**之后**（或在别处刷新了会话），
+                    // 只在创建时同步一次的话，那种情况下 WebView 仍拿不到登录态，
+                    // 表现就是 H5 里显示未登录 / 401 SolarAuthFilter。
+                    // update 在每次重组与 h5Url 变化时都会跑，幂等且成本可接受。
+                    syncCookiesToWebView(viewModel.h5Url)
                     // 只在 URL 变化时重新加载。
                     if (view.url != viewModel.h5Url && viewModel.webError == null) {
                         view.loadUrl(viewModel.h5Url)
