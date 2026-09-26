@@ -29,7 +29,7 @@ import java.util.zip.GZIPOutputStream
  *        -> imgsearch/sdk/utils/e.c([B)[B   // native: libContentEncoder.so
  * ```
  *
- * 即真实编码器的顺序是：**先 gzip 压缩明文，再交给 `ContentEncoderJNI.c()`**。
+ * 即真实编码器的顺序是：**先 gzip 压缩明文，再交给 `ContentBridge.encode()`**。
  * 这与 [NativeDecodeInstaller] 的解码顺序（`c()` 出中间层 → gzip 解压）完全互逆，
  * 两端共用同一个 so。
  *
@@ -65,7 +65,7 @@ object NativeEncodeInstaller {
     fun install(): Boolean {
         if (installed) return true
 
-        if (!ContentEncoderJNI.ensureLoaded()) {
+        if (!ContentBridge.isReady) {
             installed = false
             return false
         }
@@ -83,7 +83,7 @@ object NativeEncodeInstaller {
 }
 
 /**
- * 真实 JNI 编码器：先 GZIP 压缩明文，再交给 [ContentEncoderJNI.c]。
+ * 真实 JNI 编码器：先 GZIP 压缩明文，再交给 [ContentBridge.encode]。
  *
  * 与 `ds/i4.c([B)` 的调用顺序一致。任一步失败时回退原始明文，不抛异常。
  */
@@ -102,6 +102,6 @@ private object NativePayloadEncoder : PayloadEncoder {
             raw
         }
 
-        return ContentEncoderJNI.c(compressed) ?: raw
+        return ContentBridge.encode(compressed) ?: raw
     }
 }

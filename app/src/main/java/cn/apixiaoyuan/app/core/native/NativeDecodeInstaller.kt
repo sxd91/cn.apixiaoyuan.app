@@ -17,7 +17,7 @@ import java.util.zip.GZIPInputStream
  * ```
  * y.a(byte[])                          // 公开入口
  *   -> y.b(byte[])                     // 私有
- *        -> ContentEncoderJNI.c([B)[B  // native: libContentEncoder.so
+ *        -> ContentBridge.encode  // native: libContentEncoder.so
  *   -> new GZIPInputStream(...)        // b() 之后再走一层 gzip
  * ```
  *
@@ -55,7 +55,7 @@ object NativeDecodeInstaller {
     fun install(): Boolean {
         if (installed) return true
 
-        if (!ContentEncoderJNI.ensureLoaded()) {
+        if (!ContentBridge.isReady) {
             installed = false
             return false
         }
@@ -73,16 +73,15 @@ object NativeDecodeInstaller {
 }
 
 /**
- * 真实 JNI 解码器：[ContentEncoderJNI.c] 之后接一层 GZIP 解压。
+ * 真实 JNI 解码器：[ContentBridge.encode] 之后接一层 GZIP 解压。
  *
  * 与 `y.smali` 的调用顺序一致。gzip 失败时回退中间层，不抛异常 ——
  * 抛异常会让拦截器把整条响应判为失败，而回退中间层能让调用方看到
  * native 输出的原始字节，便于判断是「native 解错」还是「包装层不同」。
  */
 private object NativePayloadDecoder : PayloadDecoder {
-
     override fun decode(raw: ByteArray): ByteArray {
-        val mid = ContentEncoderJNI.c(raw) ?: return raw
+        val mid = ContentBridge.encode(raw) ?: return raw
         return try {
             GZIPInputStream(mid.inputStream()).use { gz ->
                 val out = ByteArrayOutputStream(mid.size.coerceAtLeast(64))

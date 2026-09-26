@@ -97,6 +97,11 @@ class App : Application() {
         // 依赖它给主域 URL 补 `sign`（缺 sign 一律 417 x-block-by: solar-encoder）。
         // so 加载失败时静默降级（不补 sign），不阻断启动。
         cn.apixiaoyuan.app.core.sign.SignComputer.init(this)
+        // 内容编解码桥：加载内置 libContentEncoder.so，按 JNI_OnLoad+0x1ecf0 调
+        // getEncodedP([B)[B。替代原先用 System.loadLibrary 的写法 ——
+        // 该 so 经 RegisterNatives 注册到 com/fenbi/.../imgsearch/sdk/utils/e，
+        // 本工程无此类，loadLibrary 必然失败（详见 ContentBridge 的 KDoc）。
+        cn.apixiaoyuan.app.core.native.ContentBridge.init(this)
 
         // 数据库：模块 12-13。八表实体 + SampleDao + AppDatabase。
         // 只建库不迁数据，初始化无副作用；放最后，不干扰网络与会话链路。

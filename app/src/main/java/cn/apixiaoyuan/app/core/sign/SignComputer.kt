@@ -2,6 +2,7 @@ package cn.apixiaoyuan.app.core.sign
 
 import android.content.Context
 import android.util.Log
+import cn.apixiaoyuan.app.core.native.NativeSoExtractor
 import java.io.File
 
 /**
@@ -130,47 +131,12 @@ object SignComputer {
      * **不会**解压到 `nativeLibraryDir`（实测该目录为空目录）。
      * 因此不能只认 `nativeLibraryDir`，必须回退到「从 APK 里取出」。
      *
-     * 取法：优先用已解压的文件；没有则从 `applicationInfo.sourceDir`
-     * （split APK 场景下退到 `splitSourceDirs` 里找）读出 lib/arm64-v8a 条目，
-     * 落到 `filesDir/native/` 后再用。已存在则直接复用，避免每次启动重复解压。
-     *
-     * @return 可 dlopen 的文件；全部失败时返回 null。
+     * 实现抽到 [NativeSoExtractor] 复用（`libContentEncoder.so` 走同一逻辑），
+     * 并用 [SO_SIZE] 校验版本 —— so 版本与 [CHAIN_OFFSET] 强绑定，
+     * 拿错版本会静默算出错误的 sign。
      */
-    private fun extractRequestEncoder(context: Context): File? {
-        // 1) 已解压的情况（extractNativeLibs=true 或部分 ROM 会解压）
-        val dir = File(context.applicationInfo.nativeLibraryDir)
-        val direct = File(dir, SO_NAME)
-        if (direct.exists() && direct.length() == SO_SIZE) return direct
-
-        // 2) 已缓存到私有目录
-        val cache = File(context.filesDir, "native/$SO_NAME")
-        if (cache.exists() && cache.length() == SO_SIZE) return cache
-
-        // 3) 从 APK 里解压
-        val sources = buildList {
-            context.applicationInfo.sourceDir?.let { add(File(it)) }
-            context.applicationInfo.splitSourceDirs?.forEach { add(File(it)) }
-        }
-        for (apk in sources) {
-            if (!apk.exists()) continue
-            val out = runCatching {
-                java.util.zip.ZipFile(apk).use { zip ->
-                    val entry =
-                        zip.getEntry("lib/arm64-v8a/$SO_NAME") ?: return@use null
-                    cache.parentFile?.mkdirs()
-                    zip.getInputStream(entry).use { input ->
-                        cache.outputStream().use { output -> input.copyTo(output) }
-                    }
-                    cache
-                }
-            }.getOrNull()
-            if (out != null) {
-                Log.i(TAG, "extracted $SO_NAME from ${apk.name} -> ${out.absolutePath}")
-                return out
-            }
-        }
-        return null
-    }
+    private fun extractRequestEncoder(context: Context): File? =
+        NativeSoExtractor.resolve(context, SO_NAME, SO_SIZE)
 
     /**
      * 计算主域签名。
