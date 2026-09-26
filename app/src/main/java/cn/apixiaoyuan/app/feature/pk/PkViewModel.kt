@@ -52,6 +52,16 @@ class PkViewModel : ViewModel() {
     var webError by mutableStateOf<String?>(null)
 
     /**
+     * 显式重载令牌。每次「重试」自增。
+     *
+     * [PkH5Screen] 用 `(h5Url, reloadToken)` 作为「原生下发的加载目标」，
+     * 只在目标变化时调 `loadUrl`。重试按钮若只重置 [webError]，目标没变，
+     * 就不会触发重新加载 —— 所以这里必须有个单调递增的令牌参与目标键。
+     */
+    var reloadToken by mutableStateOf(0)
+        private set
+
+    /**
      * 主域登录态自检结果。null = 还没探过。
      *
      * false 时 UI 应提示「请先导入登录态」而不是让用户对着白屏 ——
@@ -90,6 +100,9 @@ class PkViewModel : ViewModel() {
         webError = null
         webProgress = 0
         h5Url = PkRepository.pkH5Url()
+        // 递增令牌：即使 URL 与上次相同，也让 PkH5Screen 的重载目标变化，
+        // 从而真正触发一次新的 loadUrl（否则目标不变 = 不加载）。
+        reloadToken++
     }
 
     companion object {

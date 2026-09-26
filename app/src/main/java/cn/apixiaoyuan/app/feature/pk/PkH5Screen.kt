@@ -9,6 +9,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,19 +21,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import cn.apixiaoyuan.app.core.design.icon.AppIcons
 import cn.apixiaoyuan.app.core.oldsimian.PkJsInjector
 import cn.apixiaoyuan.app.core.session.SessionStore
 
@@ -74,6 +81,32 @@ fun PkH5Screen(
     val context = LocalContext.current
     val webView = remember {
         WebView(context).apply {
+            // ---- View 焦点：PK 容器绝不能持有它（真机崩溃的根因）----
+            //
+            // 崩溃栈（dropbox data_app_crash@1790394023891，2026-09-26 11:40）：
+            //   Choreographer.doFrame
+            //     → Compose applyChanges (ez0.h / ma.i)
+            //     → ViewGroup.removeViewInLayout
+            //     → ViewGroup.removeViewInternal (ViewGroup.java:5847)
+            //     → View.rootViewRequestFocus (View.java:9103)
+            //     → AndroidComposeView.requestFocus
+            //     → "Compose Runtime internal error
+            //        (pending composition has not been applied)"
+            //
+            // 机理：`ViewGroup.removeViewInternal` 发现被移除的 View 正是
+            // `mFocused` 时，会调 `rootViewRequestFocus()` 向上层重新找焦点
+            // 持有者；此刻 Compose 正处在 apply 阶段，焦点落到
+            // `AndroidComposeView` 上便触发重入合成 → 抛错崩溃。
+            //
+            // 而 WebView 天生可聚焦：clickable 的 View 在 touch mode 下触摸即
+            // `requestFocus()`。所以「点一下 PK 页面，再返回」必然命中这条路径。
+            //
+            // 这里设 `isFocusable=false` 从源头断掉；**不动**
+            // `descendantFocusability`，保留 WebView 内部 input 弹输入法的能力
+            // （HTML 输入焦点走 chromium 内部子 View，不依赖 WebView 自身可聚焦）。
+            isFocusable = false
+            isFocusableInTouchMode = false
+
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -139,14 +172,42 @@ fun PkH5Screen(
         }
     }
     
+    // 原生**主动驱动加载**的目标 URL。
+    //
+    // 只认这个值，绝不用 `WebView.url` 做判断 —— PK H5 是 SPA（hash 路由），
+    // H5 内部导航会把 `WebView.url` 改写成 `pk.html#/xxx`，此时
+    // `view.url != h5Url` **恒为真** → `AndroidView.update` 每次重组都 loadUrl
+    // → 表现就是「PK 页面一直在刷新」。
+    //
+    // 这里记住「原生最近一次下发的目标」：只有目标变化，或用户显式重试
+    // （reloadToken 递增）才重新加载。H5 内部的导航完全不触发原生 loadUrl，
+    // 也就不再打断 SPA 自身的路由。
+    var loadedTarget by remember { mutableStateOf<Pair<String, Int>?>(null) }
+
     DisposableEffect(Unit) {
         onDispose {
             // 注意：这里**不能** destroy WebView —— 销毁已移交给 AndroidView 的
             // onRelease（见下方 AndroidView）。onDispose 与合成同帧同步执行，
             // 此时 WebView 正在被移出视图树，destroy 会与 requestFocus 重入竞争
-            // 导致 Compose 运行时崩溃。这里只做非破坏性的停止加载。
+            // 导致 Compose 运行时崩溃。这里只做非破坏性的清理。
+            //
+            // clearFocus 是必要的一半：即使 WebView 本身不可聚焦
+            // （见构造处的 isFocusable=false），focus 也可能落在它的某个子 View 上，
+            // removeViewInternal 同样会走 rootViewRequestFocus 那条崩溃路径。
+            runCatching { webView.clearFocus() }
             runCatching { webView.stopLoading() }
         }
+    }
+
+    // ---- 系统返回键 ----
+    //
+    // 语义对齐原版容器（BaseWebApp 的返回 = 先退 H5 历史，退无可退才关容器）：
+    //  1. H5 自己有历史（含 SPA 的 pushState/hash 导航，Chromium 会记进
+    //     navigation controller）→ `goBack()`，不退容器；
+    //  2. 已在 H5 首页 → 回调 [onFinish]，由调用方决定去哪。
+    //     [PkScreen] 传的是 `navController.popBackStack()`，即回主页。
+    BackHandler(enabled = true) {
+        goBackOrFinish(webView, onFinish)
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
@@ -161,15 +222,32 @@ fun PkH5Screen(
             }
             
             // ---- 标题栏 ----
+            //
+            // 返回按钮是原版有、而此前这里漏掉的：原版 PK 走独立的 WebApp
+            // Activity（`BaseWebAppActivity`），它的标题栏由容器统一提供返回控件，
+            // 点它 = 退 H5 历史 / 关容器回主页。这里此前只有 `Text(webTitle)`，
+            // 用户点不到「返回」，只能靠系统返回键 —— 这就是「点 PK 页返回按钮
+            // 没法像原版一样回主页」的原因。
+            //
+            // 语义与 [BackHandler] 完全一致，共用 [goBackOrFinish]，避免两处
+            // 行为漂移。
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                IconButton(onClick = { goBackOrFinish(webView, onFinish) }) {
+                    Icon(
+                        imageVector = AppIcons.Back,
+                        contentDescription = "返回",
+                    )
+                }
                 Text(
                     text = viewModel.webTitle,
                     style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 if (viewModel.loading) {
@@ -191,8 +269,16 @@ fun PkH5Screen(
                     // 表现就是 H5 里显示未登录 / 401 SolarAuthFilter。
                     // update 在每次重组与 h5Url 变化时都会跑，幂等且成本可接受。
                     syncCookiesToWebView(viewModel.h5Url)
-                    // 只在 URL 变化时重新加载。
-                    if (view.url != viewModel.h5Url && viewModel.webError == null) {
+
+                    // ---- 加载判定：只认「原生下发的目标」，不用 view.url ----
+                    //
+                    // 此前是 `if (view.url != viewModel.h5Url && webError == null)`，
+                    // 对 SPA 恒为真 → 无限刷新（详见 nativeLoadTarget 的注释）。
+                    // 现在：目标 = (h5Url, reloadToken)；仅当与上次下发目标不同
+                    // 才 loadUrl。H5 内部路由变化不再触发任何原生加载。
+                    val target = viewModel.h5Url to viewModel.reloadToken
+                    if (viewModel.webError == null && target != loadedTarget) {
+                        loadedTarget = target
                         view.loadUrl(viewModel.h5Url)
                     }
                 },
@@ -239,6 +325,23 @@ fun PkH5Screen(
 }
 
 /**
+ * 「返回」的统一实现：先退 H5 历史，退无可退才关容器回主页。
+ *
+ * 标题栏的返回按钮与系统返回键（[BackHandler]）**共用**这一个实现，
+ * 保证两条入口行为一致 —— 此前标题栏根本没有返回控件，只能在系统返回键里
+ * 写内联逻辑，改一处漏一处。
+ *
+ * H5 的 hash 路由导航（SPA 的 `#/xxx`）会被 Chromium 记进 navigation
+ * controller，所以 `canGoBack()` 同样覆盖 SPA 内部的前进后退。
+ *
+ * @param webView   PK 容器
+ * @param onFinish  H5 首页再返回时的回调（由 [PkScreen] 决定，当前 = 回主页）
+ */
+private fun goBackOrFinish(webView: WebView, onFinish: () -> Unit) {
+    if (webView.canGoBack()) webView.goBack() else onFinish()
+}
+
+/**
  * 安全销毁 WebView（由 AndroidView 的 onRelease 调用，此时 View 已移出视图树）。
  *
  * 顺序是有讲究的，真机崩溃倒逼出的三条：
@@ -256,6 +359,11 @@ fun PkH5Screen(
  */
 private fun releaseWebView(view: WebView) {
     runCatching {
+        // 先清焦点：removeView 时若 WebView 或其子 View 仍持有焦点，
+        // ViewGroup.removeViewInternal 会走 rootViewRequestFocus()，
+        // 把焦点交给 AndroidComposeView → 重入合成崩溃
+        // （真机栈见构造处 isFocusable 的注释）。clearFocus 要在 destroy 之前。
+        view.clearFocus()
         view.stopLoading()
         view.webViewClient = WebViewClient()
         view.settings.javaScriptEnabled = false
@@ -321,9 +429,11 @@ private fun httpDate(epochMillis: Long): String =
  *
  * 原版 H5 通过这个 scheme 调原生能力，已知的有：
  *  - `leo://openWebView?url=...` —— 打开新 WebView
+ *    （MT APK MCP 取证：`LeoPkAppWidgetProvider` 等类内含 `leo://openWebView?url=`）
  *  - `leo://close` —— 关闭当前容器
+ *  - `leo://back` —— 退当前容器历史（对齐原生返回语义）
  *
- * 当前只处理 `close`（回上一页），其余记录日志后忽略。
+ * 当前处理 `close` / `back`（都回退），其余记录日志后忽略。
  * 完整 scheme 表待从原版 smali 的 WebView 容器实现里挖出。
  *
  * @return true 表示已消费该 URL，WebView 不再加载它
@@ -333,7 +443,7 @@ private fun handleScheme(url: String, onFinish: () -> Unit): Boolean {
     
     val uri = Uri.parse(url)
     when (uri.host) {
-        "close" -> {
+        "close", "back", "finish" -> {
             onFinish()
             return true
         }

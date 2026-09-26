@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import cn.apixiaoyuan.app.core.navigation.RouteHome
 
 /**
  * 口算 PK 入口页。
@@ -37,6 +38,16 @@ fun PkScreen(
 
     PkH5Screen(
         viewModel = viewModel,
-        onFinish = { navController.popBackStack() },
+        // 「返回」回主页，而不是简单 pop 一层 —— 用户要求「像小猿 AI 原版一样
+        // 返回主页」。原版 PK 是独立 WebApp Activity，返回即 finish 回主页；
+        // 这里 PK 是 Home tab 的下一级，所以显式回退到 RouteHome。
+        //
+        // 兜底：若返回栈里此刻没有 RouteHome（理论上不会 —— PK 只从首页快捷
+        // 入口进入），退化为普通 popBackStack，避免按键变成「无响应」。
+        onFinish = {
+            if (!navController.popBackStack<RouteHome>(inclusive = false)) {
+                navController.popBackStack()
+            }
+        },
     )
 }
