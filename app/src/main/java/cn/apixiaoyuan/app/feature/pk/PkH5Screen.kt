@@ -118,8 +118,16 @@ fun PkH5Screen(
             }
 
             // 同步登录态：把 SessionStore 的 cookie 写进 CookieManager。
-            // 必须在 loadUrl 之前 —— WebView 用 CookieManager 发请求，
+            // 必须在**首次** loadUrl 之前 —— WebView 用 CookieManager 发请求，
             // 不是用 OkHttp 的 PersistentCookieJar。
+            //
+            // ⚠️ 这里**只在创建时同步一次**。此前同步放在 `AndroidView.update` 里
+            // 「每次重组都跑」，而 `syncCookiesToWebView` 结尾有
+            // `CookieManager.flush()`（**磁盘 I/O**）。PK 的 H5 是 SPA，内部导航会
+            // 反复触发 onPageStarted / onPageFinished → `setProgress` 改状态 →
+            // 重组 → 又一次 flush…… 形成「重组→flush→重组」的自激循环，
+            // 表现就是**PK 页面一闪一闪**。登录态后续刷新的场景由
+            // `AndroidView.update` 里带守卫的那次同步兜底（见下方 loadedTarget 块）。
             CookieManager.getInstance().apply {
                 setAcceptCookie(true)
             }
@@ -134,7 +142,6 @@ fun PkH5Screen(
                     // 不重置会导致「老挂戏老叟」脚本被叠加注入多轮。
                     view?.let { PkJsInjector.markPageStarted(it) }
                 }
-
                 override fun onPageFinished(view: WebView?, url: String?) {
                     viewModel.setProgress(100)
                     view?.title?.takeIf { it.isNotBlank() }?.let { viewModel.webTitle = it }
@@ -214,7 +221,14 @@ fun PkH5Screen(
         Column(modifier = Modifier.fillMaxSize()) {
             
             // ---- 顶部进度条 ----
-            if (viewModel.webProgress in 1..99) {
+            //
+            // 只在**首次加载**显示（`loadedTarget` 为空 = 还没加载过）。
+            //
+            // 之前是 `webProgress in 1..99` 就显示，而 PK 的 H5 是 SPA：内部路由
+            // （`pk.html#/xxx`）会反复触发 onPageStarted(5) / onPageFinished(100)，
+            // 进度条于是**反复出现又消失**，看起来就是页面一闪一闪（用户反馈）。
+            // 首次加载完成后不再显示，把 SPA 的内部导航交给 H5 自己。
+            if (viewModel.webProgress in 1..99 && loadedTarget == null) {
                 LinearProgressIndicator(
                     progress = { viewModel.webProgress / 100f },
                     modifier = Modifier.fillMaxWidth(),
@@ -263,22 +277,20 @@ fun PkH5Screen(
                 factory = { webView },
                 modifier = Modifier.fillMaxSize(),
                 update = { view ->
-                    // Cookie 同步放在 update 而不是只在 remember 里做一次：
-                    // 登录可能发生在进入 PK 页**之后**（或在别处刷新了会话），
-                    // 只在创建时同步一次的话，那种情况下 WebView 仍拿不到登录态，
-                    // 表现就是 H5 里显示未登录 / 401 SolarAuthFilter。
-                    // update 在每次重组与 h5Url 变化时都会跑，幂等且成本可接受。
-                    syncCookiesToWebView(viewModel.h5Url)
-
-                    // ---- 加载判定：只认「原生下发的目标」，不用 view.url ----
+                    // ⚠️ **不要**在这里无条件调 `syncCookiesToWebView()`。
                     //
-                    // 此前是 `if (view.url != viewModel.h5Url && webError == null)`，
-                    // 对 SPA 恒为真 → 无限刷新（详见 nativeLoadTarget 的注释）。
-                    // 现在：目标 = (h5Url, reloadToken)；仅当与上次下发目标不同
-                    // 才 loadUrl。H5 内部路由变化不再触发任何原生加载。
+                    // 此前那版放在这里，导致 PK 页一闪一闪：该函数结尾有
+                    // `CookieManager.flush()`（磁盘 I/O）；SPA 内部导航反复触发
+                    // `onPageStarted`/`onPageFinished` → `setProgress` 改状态 → 重组
+                    // → 再一次 flush → …… 形成自激循环。
+                    //
+                    // 现在只在**「原生下发的加载目标」发生变化**（即真的要重新加载）
+                    // 时才同步一次，与加载判定共用同一个守卫，天然去重。
                     val target = viewModel.h5Url to viewModel.reloadToken
                     if (viewModel.webError == null && target != loadedTarget) {
                         loadedTarget = target
+                        // 顺序要紧：先同步 cookie，再 loadUrl（WebView 用 CookieManager 发请求）。
+                        syncCookiesToWebView(viewModel.h5Url)
                         view.loadUrl(viewModel.h5Url)
                     }
                 },
