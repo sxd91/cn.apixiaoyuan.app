@@ -275,6 +275,50 @@ fun AccountScreen(
                 }
             }
 
+            // ==================== 登录态导入 ====================
+            //
+            // ⚠️ 2026-09-26 恢复：此前一度删除，依据是「主域不需要设备链」的实测结论 ——
+            // 那个结论是**错的**：它只测了 `rank/pre-fetch`，而该端点是服务端的
+            // **路径白名单特例**（不走认证也不走编码，任何 cookie 都 200），
+            // 不能用来推断整个主域。
+            //
+            // 用真实业务端点（batchGet / task/home / leo-math）重测：
+            //   完整 cookie（登录 + sid + ks_*） → 417 solar-encoder（认证已过，只卡编码）
+            //   去掉 sid + 全部 ks_*             → 401 leo-auth
+            //   不带                              → 401 fenbi-auth
+            // 即设备链**确实是必需的**，且认证是两层链（fenbi-auth → leo-auth）。
+            SectionCard(title = "导入登录态（主域权限）") {
+                Text(
+                    text = "主域业务接口（练习 / 出题 / 资料）需要两层凭据：\n" +
+                        "① 设备链 sid + ks_sess + ks_deviceid（+ ks_persistent / ks_r / ks_u），" +
+                        "由原版 App 下发，本项目拿不到；\n" +
+                        "② 用户凭据 sess / userid / g_sess，本项目登录已有。\n" +
+                        "只带 ② 会得到 401 leo-auth；两层齐备才会进入编码层。",
+                    color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
+                )
+                TextField(
+                    value = viewModel.cookieInput,
+                    onValueChange = { viewModel.cookieInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = "sid=...; ks_sess=...; ks_deviceid=...（可只粘这三个）",
+                    useLabelAsPlaceholder = true,
+                    maxLines = 4,
+                )
+                Button(
+                    onClick = { viewModel.importCookies() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("导入")
+                }
+                Text(
+                    text = "导入只覆盖同名项，不会清掉本项目登录已拿到的 cookie —— " +
+                        "两层必须共存。设备链也不会被服务端的清除指令抹掉。\n" +
+                        "注：练习类接口在两层齐备后仍可能返回 417（solar-encoder），" +
+                        "那是编码层校验，与登录态无关。",
+                    color = MiuixTheme.colorScheme.onSurfaceContainerVariant,
+                )
+            }
+
             viewModel.message?.let {
                 Card(
                     modifier = Modifier.fillMaxWidth(),

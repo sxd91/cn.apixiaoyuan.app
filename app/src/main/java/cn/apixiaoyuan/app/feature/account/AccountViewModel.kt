@@ -40,6 +40,9 @@ class AccountViewModel : ViewModel() {
     var currentUser by mutableStateOf<UserVO?>(null)
         private set
 
+    /** 导入登录态用的文本（标准 Cookie 头形态）。 */
+    var cookieInput by mutableStateOf("")
+
     /** 宝贝学习账号列表。 */
     var subAccounts by mutableStateOf<List<SubAccountItem>>(emptyList())
         private set
@@ -301,6 +304,38 @@ class AccountViewModel : ViewModel() {
 
     fun clearMessage() {
         message = null
+    }
+
+    /**
+     * 导入登录态（标准 `Cookie` 头形态）。
+     *
+     * **这是本项目拿到主域业务权限的必要途径** —— 主域业务端点（练习 / 出题 /
+     * 资料）的认证是两层链，缺第一层直接 401：
+     *
+     * | 携带的 cookie | 结果 |
+     * |---|---|
+     * | 完整（登录 cookie + `sid` + `ks_*`） | 进入编码层（417 说明认证已过） |
+     * | 去掉 `sid` + 全部 `ks_*` | 401 `x-block-by: leo-auth` |
+     * | 不带 | 401 `x-block-by: fenbi-auth` |
+     *
+     * ⚠️ 曾经误删过这个入口：当时只测了 `rank/pre-fetch`（服务端**路径白名单特例**，
+     * 任何 cookie 都 200），据此错误地得出「主域不需要设备链」。用真实业务端点
+     * 复测后已纠正并恢复。
+     */
+    fun importCookies() {
+        val text = cookieInput.trim()
+        if (text.isEmpty()) {
+            message = "请先粘贴 Cookie 字符串"
+            return
+        }
+        val n = SessionStore.importCookieHeader(text)
+        if (n == 0) {
+            message = "没能解析出任何 cookie（应为 name=value; name2=value2 形态）"
+            return
+        }
+        cookieInput = ""
+        message = "已导入 $n 条 cookie。设备链与登录 cookie 两层齐备后，主域业务接口才可用。"
+        refresh()
     }
 
     private fun startCountdown() {
